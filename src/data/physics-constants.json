@@ -1,0 +1,121 @@
+{
+  "black_hole_physics": {
+    "schwarzschild_radius": {
+      "formula": "rs = 2GM/c^2",
+      "description": "Event horizon radius",
+      "units": "meters"
+    },
+    "geodesic_equations": {
+      "radial": "d\u00b2r/d\u03bb\u00b2 = -GM/r\u00b2 + L\u00b2/r\u00b3 - 3GML\u00b2/c\u00b2r\u2074",
+      "angular_theta": "d\u00b2\u03b8/d\u03bb\u00b2 = sin(\u03b8)cos(\u03b8)(d\u03c6/d\u03bb)\u00b2",
+      "angular_phi": "d\u00b2\u03c6/d\u03bb\u00b2 = -2(dr/d\u03bb)(d\u03c6/d\u03bb)/r",
+      "time": "dt/d\u03bb = (1-rs/r)\u207b\u00b9"
+    },
+    "gravitational_lensing": {
+      "deflection_angle": "\u03b1 \u2248 4GM/(c\u00b2b)",
+      "einstein_radius": "\u03b8E = \u221a(4GM/c\u00b2 * Dls/(Dl*Ds))",
+      "lens_equation": "\u03b2 = \u03b8 - \u03b1(\u03b8)"
+    },
+    "relativistic_effects": [
+      "Gravitational redshift: \u03bd_obs = \u03bd_emit * \u221a(1-rs/r)",
+      "Time dilation: dt_proper = dt_coordinate * \u221a(1-rs/r)",
+      "Doppler beaming: \u03b4 = [\u0393(1 - \u03b2*cos(\u03b8))]\u207b\u00b9",
+      "Frame dragging (Kerr): \u03c9 = 2GMa/(c\u00b2r\u00b3)"
+    ],
+    "accretion_disk": {
+      "temperature_profile": "T(r) = [3GM\u1e40/(8\u03c0\u03c3r\u00b3)(1-\u221a(r_in/r))]^(1/4)",
+      "surface_brightness": "I(r) \u221d r\u207b\u00b3(1-\u221a(r_in/r))",
+      "inner_radius": "r_in = 3rs (Schwarzschild), r_in = rs (Kerr, a=1)"
+    }
+  },
+  "dark_matter_model": {
+    "nfw_profile": {
+      "density": "\u03c1(r) = \u03c1s / [(r/rs)(1 + r/rs)\u00b2]",
+      "description": "Navarro-Frenk-White profile",
+      "concentration": "c = r_vir/r_s"
+    },
+    "velocity_distribution": {
+      "maxwell_boltzmann": "f(v) \u221d v\u00b2 * exp(-v\u00b2/(2\u03c3\u00b2))",
+      "escape_velocity": "v_esc(r) = \u221a(2GM(r)/r)",
+      "dispersion": "\u03c3 = v_0/\u221a2"
+    },
+    "halo_properties": {
+      "virial_radius": "r_vir typically 100-300 kpc",
+      "mass": "M_vir = 10^11 to 10^13 M_sun for MW-like",
+      "scale_radius": "r_s = r_vir/c"
+    }
+  },
+  "4d_spacetime": {
+    "minkowski_metric": "ds\u00b2 = -c\u00b2dt\u00b2 + dx\u00b2 + dy\u00b2 + dz\u00b2",
+    "schwarzschild_metric": "ds\u00b2 = -(1-rs/r)c\u00b2dt\u00b2 + (1-rs/r)\u207b\u00b9dr\u00b2 + r\u00b2d\u03a9\u00b2",
+    "kerr_metric": "ds\u00b2 = -(1-rs*r/\u03a3)c\u00b2dt\u00b2 - 2rs*r*a*sin\u00b2\u03b8/\u03a3 dtd\u03c6 + \u03a3/\u0394 dr\u00b2 + \u03a3d\u03b8\u00b2 + (r\u00b2+a\u00b2+rs*r*a\u00b2sin\u00b2\u03b8/\u03a3)sin\u00b2\u03b8 d\u03c6\u00b2",
+    "visualization_methods": [
+      "4D to 3D projection: perspective projection from 4D eye point",
+      "Slicing: intersect 4D object with 3D hyperplane",
+      "Parallel projection: eye at infinity in 4th dimension"
+    ]
+  },
+  "numerical_methods": {
+    "ode_integrators": [
+      "Runge-Kutta 4th order (RK4)",
+      "Dormand-Prince 5(4) adaptive",
+      "Verlet integration for particle motion"
+    ],
+    "ray_tracing": {
+      "method": "Backward ray tracing from camera",
+      "steps": "Integrate null geodesics from observer to source",
+      "termination": "Hit event horizon, escape to infinity, or max iterations"
+    }
+  },
+  "star_catalog_sources": [
+    {
+      "name": "Gaia DR3",
+      "count": "1.8 billion stars",
+      "api": "https://gea.esac.esa.int/archive/",
+      "fields": [
+        "ra",
+        "dec",
+        "parallax",
+        "pmra",
+        "pmdec",
+        "phot_g_mean_mag"
+      ]
+    },
+    {
+      "name": "Hipparcos-2",
+      "count": "117,955 stars",
+      "brightness": "V < 12 mag",
+      "fields": [
+        "ra",
+        "dec",
+        "parallax",
+        "pmra",
+        "pmdec",
+        "bt_mag",
+        "vt_mag"
+      ]
+    },
+    {
+      "name": "Tycho-2",
+      "count": "2.5 million stars",
+      "brightness": "V < 12 mag",
+      "fields": [
+        "ra",
+        "dec",
+        "pmra",
+        "pmdec",
+        "bt_mag",
+        "vt_mag"
+      ]
+    }
+  ],
+  "rendering_parameters": {
+    "star_count": 70000,
+    "black_hole_mass": "10 solar masses (stellar) or 4.3M solar masses (Sgr A*)",
+    "schwarzschild_radius_units": 1.0,
+    "camera_distance": "10-100 rs",
+    "integration_steps": "100-1000 per ray",
+    "resolution": "1920x1080 or adaptive",
+    "fov": "60-90 degrees"
+  }
+}

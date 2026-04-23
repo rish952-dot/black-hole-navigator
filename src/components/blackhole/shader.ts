@@ -1,13 +1,17 @@
-// GPU fragment shader: Schwarzschild black hole with gravitational lensing,
-// thin accretion disk, relativistic Doppler beaming, and procedural starfield.
+// GPU fragment shader: Schwarzschild + Kerr-like + NFW dark matter halo
+// gravitational lensing, thin accretion disk, relativistic Doppler beaming,
+// gravitational redshift, procedural starfield, and string-theory inspired
+// extra-dimensional shimmer.
 //
 // Method: per-pixel 2D geodesic integration in the equatorial plane using the
-// effective potential for null geodesics around a Schwarzschild BH. We march
-// the impact parameter b vs. radius r and accumulate disk emission when the
-// ray crosses the equatorial plane between r_isco and r_outer.
+// effective potential for null geodesics around Schwarzschild BH, with
+// Kerr-like frame-dragging deflection added as a transverse term, and an
+// additional NFW dark-matter halo deflection term acting at large radii.
 //
-// Refs: Misner/Thorne/Wheeler "Gravitation"; Luminet 1979 disk model;
-// GPU Gems 3 — chapter on real-time relativistic rendering.
+// Refs: Misner/Thorne/Wheeler "Gravitation"; Luminet 1979; Navarro-Frenk-White
+// 1996 (dark matter density profile); Polchinski "String Theory" Vol. 1
+// (compactified dimensions — we use a phenomenological shimmer term);
+// GPU Gems 3 chapter on relativistic rendering.
 
 export const blackHoleVertex = /* glsl */ `
   varying vec2 vUv;
@@ -24,22 +28,27 @@ export const blackHoleFragment = /* glsl */ `
 
   uniform vec2  uResolution;
   uniform float uTime;
-  uniform vec3  uCamPos;       // camera position (BH at origin)
-  uniform mat3  uCamBasis;     // right, up, forward
-  uniform float uMass;         // M in geometric units; r_s = 2M
-  uniform float uSpin;         // 0..1 visual proxy for Kerr-like asymmetry
+  uniform vec3  uCamPos;
+  uniform mat3  uCamBasis;
+  uniform float uMass;
+  uniform float uSpin;         // 0..1 Kerr a/M
   uniform float uDiskInner;    // in r_s
   uniform float uDiskOuter;    // in r_s
   uniform float uDiskTilt;     // radians
   uniform float uExposure;
-  uniform float uSteps;        // integration steps
-  uniform float uDoppler;      // 0..1 strength
-  uniform float uLensing;      // 0..1 strength multiplier (debug)
-  uniform int   uMode;         // 0 full, 1 lensing only, 2 disk only, 3 geodesics
+  uniform float uSteps;
+  uniform float uDoppler;
+  uniform float uLensing;
+  uniform int   uMode;
+  // New physics uniforms
+  uniform float uDarkMatter;   // 0..1 NFW halo strength
+  uniform float uHaloScale;    // r_s units, NFW scale radius
+  uniform float uStringDim;    // 0..1 string-theory shimmer (extra dim)
+  uniform float uFrameDrag;    // 0..1 multiplier for Kerr frame dragging
+  uniform float uRedshift;     // 0..1 grav redshift visibility
 
   #define PI 3.14159265359
 
-  // ---------- Hash / noise ----------
   float hash21(vec2 p) {
     p = fract(p * vec2(123.34, 456.21));
     p += dot(p, p + 45.32);
@@ -51,7 +60,6 @@ export const blackHoleFragment = /* glsl */ `
     return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
   }
 
-  // ---------- Procedural starfield ----------
   vec3 starfield(vec3 dir) {
     vec3 col = vec3(0.0);
     for (int layer = 0; layer < 3; layer++) {
@@ -63,28 +71,35 @@ export const blackHoleFragment = /* glsl */ `
       if (h > 0.985) {
         float d = length(fp);
         float bright = smoothstep(0.5, 0.0, d) * (h - 0.985) * 60.0;
-        // tint
         vec3 tint = mix(vec3(0.6, 0.8, 1.0), vec3(1.0, 0.85, 0.6), hash31(ip + 7.0));
         col += tint * bright;
       }
     }
-    // faint nebula band
     float nebula = smoothstep(0.2, 0.0, abs(dir.y)) * 0.04;
     col += vec3(0.15, 0.05, 0.25) * nebula;
+    // String-theory shimmer: 6 compactified dimensions projected as
+    // chromatic interference rippling through the void.
+    if (uStringDim > 0.001) {
+      float ph = dir.x * 23.0 + dir.y * 17.0 + dir.z * 31.0 + uTime * 0.5;
+      vec3 shimmer = vec3(
+        sin(ph),
+        sin(ph + 2.094),
+        sin(ph + 4.188)
+      ) * 0.5 + 0.5;
+      col += shimmer * uStringDim * 0.06;
+    }
     return col;
   }
 
-  // ---------- Accretion disk emission ----------
-  // r in r_s units; phi in rad; t time
   vec3 diskEmission(float r, float phi, float t) {
-    // Temperature profile T ~ r^-3/4 (Shakura-Sunyaev)
-    float T = pow(max(r, 1.0), -0.75);
-    // Spiral noise
+    // Shakura-Sunyaev T(r) ~ r^(-3/4) with inner cutoff factor
+    float r_in = uDiskInner;
+    float cutoff = 1.0 - sqrt(max(r_in / max(r, r_in), 0.0));
+    float T = pow(max(r, 1.0), -0.75) * max(cutoff, 0.05);
     float spiral = sin(phi * 3.0 - t * 1.5 + r * 1.8) * 0.5 + 0.5;
     float turb   = hash21(vec2(r * 4.0, phi * 6.0 + t * 0.3));
     float dens   = mix(0.6, 1.0, spiral) * mix(0.7, 1.3, turb);
 
-    // Color from temperature: hot inner = blue-white, outer = orange-red
     vec3 hot  = vec3(1.0, 0.95, 0.85);
     vec3 mid  = vec3(1.0, 0.55, 0.15);
     vec3 cool = vec3(0.7, 0.15, 0.35);
@@ -93,14 +108,18 @@ export const blackHoleFragment = /* glsl */ `
     return col * dens * (3.5 / (1.0 + r * 0.4));
   }
 
-  // ---------- Geodesic integration ----------
-  // Integrate a null geodesic in the equatorial plane (Schwarzschild).
-  // We work in 2D: project ray origin/dir onto disk plane via uDiskTilt rotation,
-  // then march using the effective potential ODE:
-  //   d^2u/dphi^2 + u = 3 M u^2     (u = 1/r, M in geometric units)
-  // Hit detected when ray crosses disk plane between r_in and r_out.
+  // NFW dark-matter density-derived deflection contribution.
+  // Enclosed mass M(r) for NFW: M(<r) = 4π ρ_s r_s^3 [ln(1+x) - x/(1+x)], x=r/r_s_halo.
+  // Added as extra Newtonian-like pull at large r where DM dominates.
+  float nfwAccel(float r) {
+    if (uDarkMatter < 0.001) return 0.0;
+    float rh = max(uHaloScale * 2.0 * uMass, 1.0);
+    float x = r / rh;
+    float menc = log(1.0 + x) - x / (1.0 + x);
+    return uDarkMatter * 0.15 * menc / max(r * r, 0.5);
+  }
+
   vec4 traceGeodesic(vec3 ro, vec3 rd, float t) {
-    // Tilt disk: rotate world so disk lies in y=0 plane.
     float ct = cos(uDiskTilt), st = sin(uDiskTilt);
     mat3 Rt = mat3(
       1.0, 0.0, 0.0,
@@ -117,7 +136,6 @@ export const blackHoleFragment = /* glsl */ `
     vec3 col = vec3(0.0);
     float alpha = 0.0;
 
-    // March in small steps; bend ray each step toward BH per geodesic eqn.
     vec3 p = o;
     vec3 v = d;
     float dt = 0.35;
@@ -129,22 +147,29 @@ export const blackHoleFragment = /* glsl */ `
 
       float r = length(p);
       if (r < r_s * 1.02) {
-        // captured — event horizon
         return vec4(0.0, 0.0, 0.0, 1.0);
       }
-      if (r > 200.0) break;
+      if (r > 250.0) break;
 
-      // Gravitational acceleration on the photon (post-Newtonian-ish proxy
-      // matching geodesic curvature: a = -1.5 r_s / r^3 * (perpendicular)
       vec3 gdir = -p / r;
       float g = 1.5 * r_s / (r * r) * uLensing;
-      // remove component along v (keep null-ish), add transverse bend
+      // dark matter halo extra pull
+      g += nfwAccel(r);
+
       vec3 perp = gdir - dot(gdir, v) * v;
-      v = normalize(v + perp * g * dt);
+      vec3 bend = perp * g * dt;
+
+      // Kerr-like frame dragging: tangential twist around spin axis (y)
+      if (uSpin > 0.001 && uFrameDrag > 0.001) {
+        vec3 axis = vec3(0.0, 1.0, 0.0);
+        vec3 twist = cross(axis, p) / max(r * r * r, 0.01);
+        bend += twist * uSpin * uFrameDrag * r_s * 2.0 * dt;
+      }
+
+      v = normalize(v + bend);
 
       vec3 pn = p + v * dt;
 
-      // Disk plane crossing y=0
       if (sign(pn.y) != sign(prevY) && prevY != 0.0) {
         float tCross = prevY / (prevY - pn.y);
         vec3 hit = mix(p, pn, tCross);
@@ -152,23 +177,19 @@ export const blackHoleFragment = /* glsl */ `
         if (rh > r_in && rh < r_out) {
           float phi = atan(hit.z, hit.x);
 
-          // Doppler beaming: orbital velocity v_orb = sqrt(M/r)
           float vorb = sqrt(uMass / max(rh, r_s));
-          // tangent direction (prograde, with spin sign)
-          vec3 tang = vec3(-sin(phi), 0.0, cos(phi)) * mix(1.0, 1.0 + uSpin * 0.4, 1.0);
+          vec3 tang = vec3(-sin(phi), 0.0, cos(phi));
           float mu = dot(normalize(v), tang) * vorb;
           float gamma = 1.0 / sqrt(max(1.0 - vorb * vorb, 0.001));
           float dshift = 1.0 / (gamma * (1.0 - mu));
           dshift = mix(1.0, dshift, uDoppler);
 
-          // Gravitational redshift factor sqrt(1 - r_s/r)
           float gshift = sqrt(max(1.0 - r_s / rh, 0.001));
+          gshift = mix(1.0, gshift, uRedshift);
           float shift = dshift * gshift;
 
           vec3 emit = diskEmission(rh / r_s, phi + uSpin * t * 0.3, t);
-          // Beaming: intensity scales with shift^4 (relativistic)
           emit *= pow(shift, 3.0);
-          // Tint by shift (blueshift -> cool, redshift -> warm)
           emit *= mix(vec3(1.2, 0.7, 0.5), vec3(0.6, 0.85, 1.3), clamp(shift - 0.5, 0.0, 1.0));
 
           col += emit * (1.0 - alpha);
@@ -179,13 +200,16 @@ export const blackHoleFragment = /* glsl */ `
 
       prevY = pn.y;
       p = pn;
-      // adaptive: smaller steps near BH
       dt = clamp(0.08 * r, 0.15, 0.6);
     }
 
-    // Background star sampling along final direction
     if (uMode != 2) {
       vec3 stars = starfield(v);
+      // Dark matter halo: add faint diffuse glow proportional to integrated DM column
+      if (uDarkMatter > 0.001) {
+        float halo = uDarkMatter * 0.05 * exp(-length(p) / max(uHaloScale * 2.0 * uMass, 1.0));
+        stars += vec3(0.15, 0.1, 0.35) * halo;
+      }
       col += stars * (1.0 - alpha);
     }
     return vec4(col, alpha);
@@ -194,7 +218,6 @@ export const blackHoleFragment = /* glsl */ `
   void main() {
     vec2 uv = (gl_FragCoord.xy - 0.5 * uResolution) / uResolution.y;
 
-    // Build ray
     vec3 fwd = uCamBasis[2];
     vec3 right = uCamBasis[0];
     vec3 up = uCamBasis[1];
@@ -203,7 +226,6 @@ export const blackHoleFragment = /* glsl */ `
 
     vec4 result;
     if (uMode == 1) {
-      // Lensing-only debug: show deflection as color
       vec3 v = rd;
       vec3 p = ro;
       float r_s = 2.0 * uMass;
@@ -213,7 +235,7 @@ export const blackHoleFragment = /* glsl */ `
         if (r < r_s) { bend = 1.0; break; }
         if (r > 150.0) break;
         vec3 gdir = -p / r;
-        float g = 1.5 * r_s / (r * r);
+        float g = 1.5 * r_s / (r * r) + nfwAccel(r);
         vec3 perp = gdir - dot(gdir, v) * v;
         vec3 vn = normalize(v + perp * g * 0.4);
         bend += length(vn - v);
@@ -223,7 +245,6 @@ export const blackHoleFragment = /* glsl */ `
       vec3 c = mix(vec3(0.05, 0.1, 0.2), vec3(1.0, 0.5, 0.1), clamp(bend * 2.0, 0.0, 1.0));
       result = vec4(c, 1.0);
     } else if (uMode == 3) {
-      // Geodesic grid debug
       result = traceGeodesic(ro, rd, uTime);
       vec2 g = abs(fract(uv * 10.0) - 0.5);
       float grid = smoothstep(0.48, 0.5, max(g.x, g.y));
@@ -232,10 +253,10 @@ export const blackHoleFragment = /* glsl */ `
       result = traceGeodesic(ro, rd, uTime);
     }
 
-    // Tonemap (Reinhard-ish) + exposure
     vec3 c = result.rgb * uExposure;
-    c = c / (1.0 + c);
-    c = pow(c, vec3(1.0 / 2.2));
+    // ACES-ish tonemap
+    c = (c * (2.51 * c + 0.03)) / (c * (2.43 * c + 0.59) + 0.14);
+    c = pow(clamp(c, 0.0, 1.0), vec3(1.0 / 2.2));
     gl_FragColor = vec4(c, 1.0);
   }
 `;
