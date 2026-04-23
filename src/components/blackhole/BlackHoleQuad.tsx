@@ -15,9 +15,15 @@ export interface BlackHoleParams {
   lensing: number;
   mode: 0 | 1 | 2 | 3;
   cameraDistance: number;
-  cameraOrbit: number; // azimuth radians
-  cameraElevation: number; // pitch radians
+  cameraOrbit: number;
+  cameraElevation: number;
   autoRotate: boolean;
+  // New physics
+  darkMatter: number;
+  haloScale: number;
+  stringDim: number;
+  frameDrag: number;
+  redshift: number;
 }
 
 export const defaultParams: BlackHoleParams = {
@@ -35,6 +41,11 @@ export const defaultParams: BlackHoleParams = {
   cameraOrbit: 0.6,
   cameraElevation: 0.25,
   autoRotate: true,
+  darkMatter: 0.4,
+  haloScale: 20.0,
+  stringDim: 0.3,
+  frameDrag: 1.0,
+  redshift: 1.0,
 };
 
 interface Props {
@@ -61,8 +72,12 @@ export function BlackHoleQuad({ params }: Props) {
       uDoppler: { value: params.doppler },
       uLensing: { value: params.lensing },
       uMode: { value: params.mode },
+      uDarkMatter: { value: params.darkMatter },
+      uHaloScale: { value: params.haloScale },
+      uStringDim: { value: params.stringDim },
+      uFrameDrag: { value: params.frameDrag },
+      uRedshift: { value: params.redshift },
     }),
-    // intentionally only on mount; we update in useFrame
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
@@ -82,6 +97,11 @@ export function BlackHoleQuad({ params }: Props) {
     u.uDoppler.value = params.doppler;
     u.uLensing.value = params.lensing;
     u.uMode.value = params.mode;
+    u.uDarkMatter.value = params.darkMatter;
+    u.uHaloScale.value = params.haloScale;
+    u.uStringDim.value = params.stringDim;
+    u.uFrameDrag.value = params.frameDrag;
+    u.uRedshift.value = params.redshift;
 
     const azim = params.cameraOrbit + (params.autoRotate ? t * 0.08 : 0);
     const elev = params.cameraElevation;
@@ -96,7 +116,6 @@ export function BlackHoleQuad({ params }: Props) {
     const worldUp = new THREE.Vector3(0, 1, 0);
     const right = new THREE.Vector3().crossVectors(fwd, worldUp).normalize();
     const up = new THREE.Vector3().crossVectors(right, fwd).normalize();
-    // basis columns: right, up, forward
     u.uCamBasis.value.set(
       right.x, up.x, fwd.x,
       right.y, up.y, fwd.y,
