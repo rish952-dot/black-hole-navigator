@@ -49,6 +49,8 @@ export const blackHoleFragment = /* glsl */ `
   uniform float uVectorScale;  // 0.25..4 — overall warp / deflection magnitude
   uniform float uThermal;      // 0..1 — thermal false-color disk overlay
   uniform float uDarkOnly;     // 0..1 — show only DM contribution
+  uniform float uRayBounces;   // 0..3 — secondary disk reflection bounces (UE-style PT)
+  uniform float uTimeLapse;    // 0.1..20 — time acceleration multiplier
 
   #define PI 3.14159265359
 
