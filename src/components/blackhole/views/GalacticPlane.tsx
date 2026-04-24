@@ -13,6 +13,14 @@ interface Props {
   className?: string;
 }
 
+export type GalaxyType = "spiral" | "elliptical" | "irregular" | "colliding";
+const GALAXY_TYPES: { id: GalaxyType; label: string }[] = [
+  { id: "spiral", label: "Spiral" },
+  { id: "elliptical", label: "Elliptical" },
+  { id: "irregular", label: "Irregular" },
+  { id: "colliding", label: "Colliding pair" },
+];
+
 /**
  * Galactic Plane View — N-body spiral + scrubbable formation timeline.
  *
@@ -30,14 +38,16 @@ export function GalacticPlane({ className }: Props) {
   const [playing, setPlaying] = useState(true);
   const [particleCount] = useState(isMobile ? 3000 : 8000);
   const [resetKey, setResetKey] = useState(0);
+  const [type, setType] = useState<GalaxyType>("spiral");
+  const [speed, setSpeed] = useState(1);
 
   useEffect(() => {
     if (!playing) return;
     const t = setInterval(() => {
-      setAge((a) => (a >= 13.8 ? 0.5 : a + 0.05));
+      setAge((a) => (a >= 13.8 ? 0.5 : a + 0.05 * speed));
     }, 60);
     return () => clearInterval(t);
-  }, [playing]);
+  }, [playing, speed]);
 
   return (
     <div
@@ -56,9 +66,11 @@ export function GalacticPlane({ className }: Props) {
         <pointLight position={[0, 0, 0]} intensity={3} color="#ffaa55" distance={80} />
 
         <Galaxy
-          key={resetKey}
+          key={`${resetKey}-${type}`}
           count={particleCount}
           age={age}
+          type={type}
+          speed={speed}
         />
         <DarkMatterHalo radius={60} />
         <GalacticCenter />
