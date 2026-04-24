@@ -9,6 +9,14 @@ interface Props {
   spin: number;
   className?: string;
   starCount?: number;
+  /** vector scale: 0.25..4 — multiplies grid warp depth */
+  vectorScale?: number;
+  /** dark-matter only mode: hides BH well, shows DM halo as broad bowl */
+  darkOnly?: boolean;
+  /** strain amplitude of injected gravitational wave ripple (0 = off) */
+  gwAmplitude?: number;
+  /** GW frequency (Hz-ish) of injected ripple */
+  gwFrequency?: number;
 }
 
 /**
@@ -27,6 +35,10 @@ export function SpacetimeGrid({
   spin,
   className,
   starCount = 600,
+  vectorScale = 1.0,
+  darkOnly = false,
+  gwAmplitude = 0,
+  gwFrequency = 1.5,
 }: Props) {
   return (
     <div
@@ -44,8 +56,15 @@ export function SpacetimeGrid({
         <ambientLight intensity={0.3} />
         <pointLight position={[0, 0, 0]} intensity={4} color="#ffaa55" distance={50} />
 
-        <FlammGrid mass={mass} spin={spin} />
-        <Singularity mass={mass} />
+        <FlammGrid
+          mass={mass}
+          spin={spin}
+          vectorScale={vectorScale}
+          darkOnly={darkOnly}
+          gwAmplitude={gwAmplitude}
+          gwFrequency={gwFrequency}
+        />
+        {!darkOnly && <Singularity mass={mass} />}
         <AutonomousStars count={starCount} mass={mass} spin={spin} />
 
         <OrbitControls
@@ -59,8 +78,20 @@ export function SpacetimeGrid({
           touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
         />
       </Canvas>
-      <div className="pointer-events-none absolute left-3 top-3 rounded border border-secondary/40 bg-black/60 px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-secondary">
-        4D · Flamm embedding · {starCount} entities
+      <div className="pointer-events-none absolute left-3 top-3 space-y-1">
+        <div className="rounded border border-secondary/40 bg-black/60 px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-secondary">
+          4D · Flamm embedding · {starCount} entities
+        </div>
+        {gwAmplitude > 0 && (
+          <div className="rounded border border-accent/40 bg-black/60 px-2 py-1 font-mono text-[10px] text-accent">
+            GW ripple · A={gwAmplitude.toFixed(2)} · f={gwFrequency.toFixed(2)}
+          </div>
+        )}
+        {darkOnly && (
+          <div className="rounded border border-destructive/40 bg-black/60 px-2 py-1 font-mono text-[10px] text-destructive">
+            DM-ONLY · BH well suppressed
+          </div>
+        )}
       </div>
     </div>
   );
@@ -76,38 +107,77 @@ function Singularity({ mass }: { mass: number }) {
   );
 }
 
-function FlammGrid({ mass, spin }: { mass: number; spin: number }) {
+function FlammGrid({
+  mass,
+  spin,
+  vectorScale,
+  darkOnly,
+  gwAmplitude,
+  gwFrequency,
+}: {
+  mass: number;
+  spin: number;
+  vectorScale: number;
+  darkOnly: boolean;
+  gwAmplitude: number;
+  gwFrequency: number;
+}) {
   const meshRef = useRef<THREE.Mesh>(null);
   const r_s = 2 * mass;
 
-  const geom = useMemo(() => {
+  // Reference flat positions are stored separately so we can re-warp each
+  // frame when a gravitational-wave ripple is active.
+  const { geom, basePos } = useMemo(() => {
     const size = 80;
     const seg = 100;
     const g = new THREE.PlaneGeometry(size, size, seg, seg);
     g.rotateX(-Math.PI / 2);
     const pos = g.attributes.position;
+    const base = new Float32Array(pos.count * 2); // store (x, z) only
     for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i);
-      const z = pos.getZ(i);
+      base[i * 2 + 0] = pos.getX(i);
+      base[i * 2 + 1] = pos.getZ(i);
+    }
+    return { geom: g, basePos: base };
+  }, []);
+
+  useFrame((s) => {
+    if (!meshRef.current) return;
+    const t = s.clock.elapsedTime;
+    const pos = geom.attributes.position;
+    const haloR = 30; // DM bowl scale
+
+    for (let i = 0; i < pos.count; i++) {
+      const x = basePos[i * 2 + 0];
+      const z = basePos[i * 2 + 1];
       const r = Math.sqrt(x * x + z * z);
+
+      // Schwarzschild Flamm well (suppressed in dark-only mode)
       let y = 0;
-      if (r > r_s) {
-        // Flamm paraboloid embedding
-        y = -2 * Math.sqrt(r_s * (r - r_s));
-      } else {
-        y = -2 * Math.sqrt(r_s * 0.001);
+      if (!darkOnly) {
+        if (r > r_s) y -= 2 * Math.sqrt(r_s * (r - r_s));
+        else y -= 2 * Math.sqrt(r_s * 0.001);
+      }
+      // NFW-like dark matter bowl: shallow, broad
+      y -= 0.6 * Math.log(1 + r / haloR) * vectorScale;
+      // Multiply BH well by vector scale
+      y *= vectorScale * (darkOnly ? 0.0 : 1.0) + (darkOnly ? 1.0 : 0.0);
+
+      // Gravitational-wave ripple: + polarization plane wave
+      if (gwAmplitude > 0) {
+        const k = gwFrequency * 0.4;
+        const omega = gwFrequency * 1.2;
+        // expanding ring h_+ = A sin(k r - ω t)/r at large r
+        const env = Math.exp(-Math.pow(r - omega * t * 5, 2) / 80) + 0.3 / (1 + r * 0.1);
+        y += gwAmplitude * 4 * Math.sin(k * r - omega * t) * env;
       }
       pos.setY(i, y);
     }
-    g.computeVertexNormals();
-    return g;
-  }, [r_s]);
+    pos.needsUpdate = true;
+    geom.computeVertexNormals();
 
-  useFrame((s) => {
-    if (meshRef.current) {
-      // frame-dragging twist visualization
-      meshRef.current.rotation.y = s.clock.elapsedTime * spin * 0.05;
-    }
+    // frame-dragging twist
+    meshRef.current.rotation.y = t * spin * 0.05;
   });
 
   return (
