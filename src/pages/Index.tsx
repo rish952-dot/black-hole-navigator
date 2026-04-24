@@ -7,15 +7,32 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Settings2, Layers, Atom, Activity, Network, Globe2 } from "lucide-react";
+import {
+  Settings2,
+  Layers,
+  Atom,
+  Activity,
+  Network,
+  Globe2,
+  Star,
+  Waves,
+  Table2,
+  Sparkles,
+} from "lucide-react";
 import { BlackHoleViewport } from "@/components/blackhole/BlackHoleViewport";
 import { SpacetimeGrid } from "@/components/blackhole/SpacetimeGrid";
 import { NeuralTapestry } from "@/components/blackhole/NeuralTapestry";
 import { MathGraphs } from "@/components/blackhole/MathGraphs";
+import { GalacticPlane } from "@/components/blackhole/views/GalacticPlane";
+import { StarDetails } from "@/components/blackhole/views/StarDetails";
+import { LigoWaveform } from "@/components/blackhole/views/LigoWaveform";
+import { DataMatrix } from "@/components/blackhole/views/DataMatrix";
+import { IOMeshOverlay } from "@/components/blackhole/views/IOMeshOverlay";
 import {
   defaultParams,
   type BlackHoleParams,
 } from "@/components/blackhole/BlackHoleQuad";
+import { LIGO_EVENTS, type LigoEvent } from "@/components/blackhole/data/ligo-events";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 
@@ -27,7 +44,15 @@ const MODES: { v: Mode; label: string; desc: string }[] = [
   { v: 3, label: "GRID", desc: "Geodesic debug grid" },
 ];
 
-type View = "tunnels" | "spacetime" | "tapestry" | "graphs";
+type View =
+  | "tunnels"
+  | "spacetime"
+  | "tapestry"
+  | "graphs"
+  | "galaxy"
+  | "stars"
+  | "ligo"
+  | "matrix";
 
 function NumSlider({
   label,
@@ -93,15 +118,14 @@ const Index = () => {
   });
   const [active, setActive] = useState<"A" | "B" | "C" | "D">("A");
   const [parallel, setParallel] = useState(true);
+  const [ligoEvent, setLigoEvent] = useState<LigoEvent>(LIGO_EVENTS[0]);
+  const [gwInjection, setGwInjection] = useState(false);
 
   const current =
-    active === "A"
-      ? paramsA
-      : active === "B"
-      ? paramsB
-      : active === "C"
-      ? paramsC
-      : paramsD;
+    active === "A" ? paramsA
+    : active === "B" ? paramsB
+    : active === "C" ? paramsC
+    : paramsD;
   const setCurrent = (next: BlackHoleParams) => {
     if (active === "A") setParamsA(next);
     else if (active === "B") setParamsB(next);
@@ -120,8 +144,12 @@ const Index = () => {
   const VIEW_TABS: { id: View; label: string; icon: typeof Atom }[] = [
     { id: "tunnels", label: "Tunnels", icon: Layers },
     { id: "spacetime", label: "4D Grid", icon: Globe2 },
+    { id: "galaxy", label: "Galaxy", icon: Sparkles },
+    { id: "stars", label: "Stars", icon: Star },
+    { id: "ligo", label: "LIGO", icon: Waves },
     { id: "tapestry", label: "Tapestry", icon: Network },
     { id: "graphs", label: "Graphs", icon: Activity },
+    { id: "matrix", label: "Matrix", icon: Table2 },
   ];
 
   const ControlPanel = (
@@ -131,9 +159,7 @@ const Index = () => {
           <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
             Editing
           </span>
-          <span className="font-mono text-sm text-primary">
-            Tunnel {active}
-          </span>
+          <span className="font-mono text-sm text-primary">Tunnel {active}</span>
         </div>
         <div className="grid grid-cols-4 gap-1">
           {(["A", "B", "C", "D"] as const).map((k) => (
@@ -185,11 +211,32 @@ const Index = () => {
           <NumSlider label="Halo scale (r_s)" value={current.haloScale} onChange={(v) => update("haloScale", v)} min={2} max={60} step={0.1} />
           <NumSlider label="String dim shimmer" value={current.stringDim} onChange={(v) => update("stringDim", v)} min={0} max={1} />
 
+          <div className="rounded-md border border-secondary/30 bg-secondary/5 p-2 font-mono text-[10px] text-secondary">
+            VECTOR SCALING · 4D MESH WARP
+          </div>
+          <NumSlider label="Vector scale ×" value={current.vectorScale} onChange={(v) => update("vectorScale", v)} min={0.25} max={4} />
+
+          <div className="space-y-2 pt-2">
+            <div className="flex items-center justify-between rounded-md border border-border bg-muted/30 p-2">
+              <Label className="font-mono text-[10px] text-muted-foreground">Thermal view</Label>
+              <Switch checked={current.thermal > 0.5} onCheckedChange={(v) => update("thermal", v ? 1.0 : 0.0)} />
+            </div>
+            <div className="flex items-center justify-between rounded-md border border-border bg-muted/30 p-2">
+              <Label className="font-mono text-[10px] text-muted-foreground">Dark-matter only</Label>
+              <Switch checked={current.darkOnly > 0.5} onCheckedChange={(v) => update("darkOnly", v ? 1.0 : 0.0)} />
+            </div>
+            <div className="flex items-center justify-between rounded-md border border-accent/30 bg-accent/5 p-2">
+              <Label className="font-mono text-[10px] text-accent">GW ripple ({ligoEvent.id})</Label>
+              <Switch checked={gwInjection} onCheckedChange={setGwInjection} />
+            </div>
+          </div>
+
           <div className="rounded-md border border-border bg-muted/30 p-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
-            <div className="mb-1 text-secondary">VECTOR SCALING</div>
+            <div className="mb-1 text-secondary">REFERENCE EQUATIONS</div>
             ρ_NFW(r) = ρ_s / [(r/r_s)(1+r/r_s)²]<br />
             M_enc(r) ∝ ln(1+x) − x/(1+x)<br />
-            6 compactified dims projected as RGB phase ripple
+            h₊(t,r) = A · sin(kr − ωt)/r  (LIGO ringdown)<br />
+            6 compactified dims → RGB phase ripple
           </div>
         </TabsContent>
 
@@ -241,6 +288,10 @@ const Index = () => {
     </ScrollArea>
   );
 
+  // Compute LIGO ripple injection params
+  const gwAmp = gwInjection ? Math.min(1, ligoEvent.snr / 30) * 0.4 : 0;
+  const gwFreq = gwInjection ? Math.min(4, ligoEvent.m_final / 30) : 0;
+
   return (
     <main className="flex h-screen w-full flex-col overflow-hidden bg-background text-foreground">
       {/* Header */}
@@ -252,7 +303,7 @@ const Index = () => {
               Schwarzschild Lab
             </h1>
             <p className="hidden font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground sm:block">
-              GPU geodesic · 4D · neural tapestry
+              GPU geodesic · 4D · neural tapestry · NASA/ESA · LIGO
             </p>
           </div>
         </div>
@@ -283,8 +334,8 @@ const Index = () => {
         </div>
       </header>
 
-      {/* View tabs */}
-      <div className="flex flex-shrink-0 items-center gap-1 border-b border-border bg-card/40 px-2 py-1.5 md:px-4">
+      {/* View tabs — scrollable on mobile */}
+      <div className="flex flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-border bg-card/40 px-2 py-1.5 md:px-4">
         {VIEW_TABS.map((t) => {
           const Icon = t.icon;
           return (
@@ -292,7 +343,7 @@ const Index = () => {
               key={t.id}
               size="sm"
               variant={view === t.id ? "default" : "ghost"}
-              className="h-7 gap-1.5 px-2 font-mono text-[10px] uppercase tracking-wider md:px-3"
+              className="h-7 flex-shrink-0 gap-1.5 px-2 font-mono text-[10px] uppercase tracking-wider md:px-3"
               onClick={() => setView(t.id)}
             >
               <Icon className="h-3 w-3" />
@@ -300,7 +351,7 @@ const Index = () => {
             </Button>
           );
         })}
-        <div className="ml-auto hidden font-mono text-[10px] text-muted-foreground md:block">
+        <div className="ml-auto hidden flex-shrink-0 font-mono text-[10px] text-muted-foreground md:block">
           {isMobile ? "TOUCH" : "MOUSE+TOUCH"} · UE-style ACES · adaptive DPR
         </div>
       </div>
@@ -309,28 +360,62 @@ const Index = () => {
         {/* Viewport area */}
         <div className="flex-1 overflow-auto p-2 md:p-3">
           {view === "tunnels" && (
-            parallel && !isMobile ? (
-              <div className="grid h-full grid-cols-1 gap-3 md:grid-cols-2">
-                <BlackHoleViewport params={paramsA} label="Tunnel A" sublabel="Reference · Schwarzschild" badge={active === "A" ? "EDITING" : undefined} active={active === "A"} onClick={() => setActive("A")} />
-                <BlackHoleViewport params={paramsB} label="Tunnel B" sublabel="Kerr · high spin · tilt" badge={active === "B" ? "EDITING" : undefined} active={active === "B"} onClick={() => setActive("B")} />
-                <BlackHoleViewport params={paramsC} label="Tunnel C" sublabel="Disk only · DM off" badge={active === "C" ? "EDITING" : undefined} active={active === "C"} onClick={() => setActive("C")} />
-                <BlackHoleViewport params={paramsD} label="Tunnel D" sublabel="Lensing · DM + strings" badge={active === "D" ? "EDITING" : undefined} active={active === "D"} onClick={() => setActive("D")} />
-              </div>
-            ) : isMobile ? (
-              <div className="space-y-2">
-                <div className="grid grid-cols-4 gap-1">
-                  {(["A", "B", "C", "D"] as const).map((k) => (
-                    <Button key={k} size="sm" variant={active === k ? "default" : "outline"} className="h-8 font-mono text-xs" onClick={() => setActive(k)}>{k}</Button>
-                  ))}
+            <div className="space-y-3">
+              {parallel && !isMobile ? (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <BlackHoleViewport params={paramsA} label="Tunnel A" sublabel="Reference · Schwarzschild" badge={active === "A" ? "EDITING" : undefined} active={active === "A"} onClick={() => setActive("A")} className="h-[40vh]" />
+                  <BlackHoleViewport params={paramsB} label="Tunnel B" sublabel="Kerr · high spin · tilt" badge={active === "B" ? "EDITING" : undefined} active={active === "B"} onClick={() => setActive("B")} className="h-[40vh]" />
+                  <BlackHoleViewport params={paramsC} label="Tunnel C" sublabel="Disk only · DM off" badge={active === "C" ? "EDITING" : undefined} active={active === "C"} onClick={() => setActive("C")} className="h-[40vh]" />
+                  <BlackHoleViewport params={paramsD} label="Tunnel D" sublabel="Lensing · DM + strings" badge={active === "D" ? "EDITING" : undefined} active={active === "D"} onClick={() => setActive("D")} className="h-[40vh]" />
                 </div>
-                <BlackHoleViewport params={current} label={`Tunnel ${active}`} sublabel="Tap settings ⚙ to edit" badge="LIVE" active className="h-[60vh]" />
-              </div>
-            ) : (
-              <BlackHoleViewport params={current} label={`Tunnel ${active}`} sublabel="Solo view" badge="EDITING" active className="h-full" />
-            )
+              ) : isMobile ? (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-4 gap-1">
+                    {(["A", "B", "C", "D"] as const).map((k) => (
+                      <Button key={k} size="sm" variant={active === k ? "default" : "outline"} className="h-8 font-mono text-xs" onClick={() => setActive(k)}>{k}</Button>
+                    ))}
+                  </div>
+                  <BlackHoleViewport params={current} label={`Tunnel ${active}`} sublabel="Tap settings ⚙ to edit" badge="LIVE" active className="h-[55vh]" />
+                </div>
+              ) : (
+                <BlackHoleViewport params={current} label={`Tunnel ${active}`} sublabel="Solo view" badge="EDITING" active className="h-[70vh]" />
+              )}
+              <IOMeshOverlay
+                inputCount={16}
+                hiddenCount={isMobile ? 3000 : 30000}
+                outputCount={6}
+              />
+            </div>
           )}
           {view === "spacetime" && (
-            <SpacetimeGrid mass={current.mass} spin={current.spin} starCount={isMobile ? 250 : 700} className="h-full min-h-[60vh]" />
+            <SpacetimeGrid
+              mass={current.mass}
+              spin={current.spin}
+              starCount={isMobile ? 250 : 700}
+              vectorScale={current.vectorScale}
+              darkOnly={current.darkOnly > 0.5}
+              gwAmplitude={gwAmp}
+              gwFrequency={gwFreq}
+              className="h-full min-h-[60vh]"
+            />
+          )}
+          {view === "galaxy" && (
+            <GalacticPlane className="h-full min-h-[70vh]" />
+          )}
+          {view === "stars" && (
+            <div className="h-full min-h-[60vh]">
+              <StarDetails />
+            </div>
+          )}
+          {view === "ligo" && (
+            <div className="mx-auto max-w-3xl space-y-3">
+              <div className="rounded-md border border-secondary/30 bg-secondary/5 p-3 font-mono text-[10px] leading-relaxed text-secondary">
+                LIGO/Virgo strain data drives the 4D-grid ripple. Toggle "GW
+                ripple" in the Exotic tab to inject the selected event into
+                spacetime as a propagating wave.
+              </div>
+              <LigoWaveform onSelectEvent={setLigoEvent} />
+            </div>
           )}
           {view === "tapestry" && (
             <NeuralTapestry className="h-full min-h-[60vh]" />
@@ -345,6 +430,11 @@ const Index = () => {
                 darkMatter={current.darkMatter}
                 haloScale={current.haloScale}
               />
+            </div>
+          )}
+          {view === "matrix" && (
+            <div className="mx-auto max-w-3xl">
+              <DataMatrix params={current} vectorScale={current.vectorScale} />
             </div>
           )}
         </div>
