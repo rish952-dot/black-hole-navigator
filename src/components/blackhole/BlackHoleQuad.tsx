@@ -24,6 +24,10 @@ export interface BlackHoleParams {
   stringDim: number;
   frameDrag: number;
   redshift: number;
+  // Vector scaling + render overlays
+  vectorScale: number;
+  thermal: number;
+  darkOnly: number;
 }
 
 export const defaultParams: BlackHoleParams = {
@@ -46,6 +50,9 @@ export const defaultParams: BlackHoleParams = {
   stringDim: 0.3,
   frameDrag: 1.0,
   redshift: 1.0,
+  vectorScale: 1.0,
+  thermal: 0.0,
+  darkOnly: 0.0,
 };
 
 interface Props {
@@ -77,6 +84,9 @@ export function BlackHoleQuad({ params }: Props) {
       uStringDim: { value: params.stringDim },
       uFrameDrag: { value: params.frameDrag },
       uRedshift: { value: params.redshift },
+      uVectorScale: { value: params.vectorScale },
+      uThermal: { value: params.thermal },
+      uDarkOnly: { value: params.darkOnly },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
@@ -102,6 +112,9 @@ export function BlackHoleQuad({ params }: Props) {
     u.uStringDim.value = params.stringDim;
     u.uFrameDrag.value = params.frameDrag;
     u.uRedshift.value = params.redshift;
+    u.uVectorScale.value = params.vectorScale;
+    u.uThermal.value = params.thermal;
+    u.uDarkOnly.value = params.darkOnly;
 
     const azim = params.cameraOrbit + (params.autoRotate ? t * 0.08 : 0);
     const elev = params.cameraElevation;

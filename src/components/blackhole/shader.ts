@@ -46,6 +46,9 @@ export const blackHoleFragment = /* glsl */ `
   uniform float uStringDim;    // 0..1 string-theory shimmer (extra dim)
   uniform float uFrameDrag;    // 0..1 multiplier for Kerr frame dragging
   uniform float uRedshift;     // 0..1 grav redshift visibility
+  uniform float uVectorScale;  // 0.25..4 — overall warp / deflection magnitude
+  uniform float uThermal;      // 0..1 — thermal false-color disk overlay
+  uniform float uDarkOnly;     // 0..1 — show only DM contribution
 
   #define PI 3.14159265359
 
@@ -152,9 +155,8 @@ export const blackHoleFragment = /* glsl */ `
       if (r > 250.0) break;
 
       vec3 gdir = -p / r;
-      float g = 1.5 * r_s / (r * r) * uLensing;
-      // dark matter halo extra pull
-      g += nfwAccel(r);
+      float gBh = uDarkOnly > 0.5 ? 0.0 : 1.5 * r_s / (r * r) * uLensing;
+      float g = (gBh + nfwAccel(r)) * uVectorScale;
 
       vec3 perp = gdir - dot(gdir, v) * v;
       vec3 bend = perp * g * dt;
@@ -191,6 +193,13 @@ export const blackHoleFragment = /* glsl */ `
           vec3 emit = diskEmission(rh / r_s, phi + uSpin * t * 0.3, t);
           emit *= pow(shift, 3.0);
           emit *= mix(vec3(1.2, 0.7, 0.5), vec3(0.6, 0.85, 1.3), clamp(shift - 0.5, 0.0, 1.0));
+          // Thermal false-color overlay: blue (cold ~6000 K) → red (hot ~10⁷ K)
+          if (uThermal > 0.001) {
+            float Tnorm = clamp(pow(rh / r_s, -0.75) * 4.0, 0.0, 1.0);
+            vec3 thermal = mix(vec3(0.05, 0.15, 0.9), mix(vec3(0.95, 0.85, 0.1), vec3(1.0, 0.1, 0.05), smoothstep(0.5, 1.0, Tnorm)), smoothstep(0.0, 0.5, Tnorm));
+            emit = mix(emit, thermal * 2.5 * Tnorm, uThermal);
+          }
+          if (uDarkOnly > 0.5) emit *= 0.0;
 
           col += emit * (1.0 - alpha);
           alpha += 0.85 * (1.0 - alpha);
