@@ -18,6 +18,7 @@ import {
   Waves,
   Table2,
   Sparkles,
+  Disc3,
 } from "lucide-react";
 import { BlackHoleViewport } from "@/components/blackhole/BlackHoleViewport";
 import { SpacetimeGrid } from "@/components/blackhole/SpacetimeGrid";
@@ -28,6 +29,7 @@ import { StarDetails } from "@/components/blackhole/views/StarDetails";
 import { LigoWaveform } from "@/components/blackhole/views/LigoWaveform";
 import { DataMatrix } from "@/components/blackhole/views/DataMatrix";
 import { IOMeshOverlay } from "@/components/blackhole/views/IOMeshOverlay";
+import { AccretionDiskStudy } from "@/components/blackhole/views/AccretionDiskStudy";
 import {
   defaultParams,
   type BlackHoleParams,
@@ -52,7 +54,8 @@ type View =
   | "galaxy"
   | "stars"
   | "ligo"
-  | "matrix";
+  | "matrix"
+  | "disk";
 
 function NumSlider({
   label,
@@ -144,6 +147,7 @@ const Index = () => {
   const VIEW_TABS: { id: View; label: string; icon: typeof Atom }[] = [
     { id: "tunnels", label: "Tunnels", icon: Layers },
     { id: "spacetime", label: "4D Grid", icon: Globe2 },
+    { id: "disk", label: "Disk", icon: Disc3 },
     { id: "galaxy", label: "Galaxy", icon: Sparkles },
     { id: "stars", label: "Stars", icon: Star },
     { id: "ligo", label: "LIGO", icon: Waves },
