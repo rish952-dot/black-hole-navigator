@@ -13,6 +13,14 @@ interface Props {
   className?: string;
 }
 
+export type GalaxyType = "spiral" | "elliptical" | "irregular" | "colliding";
+const GALAXY_TYPES: { id: GalaxyType; label: string }[] = [
+  { id: "spiral", label: "Spiral" },
+  { id: "elliptical", label: "Elliptical" },
+  { id: "irregular", label: "Irregular" },
+  { id: "colliding", label: "Colliding pair" },
+];
+
 /**
  * Galactic Plane View — N-body spiral + scrubbable formation timeline.
  *
@@ -30,14 +38,16 @@ export function GalacticPlane({ className }: Props) {
   const [playing, setPlaying] = useState(true);
   const [particleCount] = useState(isMobile ? 3000 : 8000);
   const [resetKey, setResetKey] = useState(0);
+  const [type, setType] = useState<GalaxyType>("spiral");
+  const [speed, setSpeed] = useState(1);
 
   useEffect(() => {
     if (!playing) return;
     const t = setInterval(() => {
-      setAge((a) => (a >= 13.8 ? 0.5 : a + 0.05));
+      setAge((a) => (a >= 13.8 ? 0.5 : a + 0.05 * speed));
     }, 60);
     return () => clearInterval(t);
-  }, [playing]);
+  }, [playing, speed]);
 
   return (
     <div
@@ -56,9 +66,11 @@ export function GalacticPlane({ className }: Props) {
         <pointLight position={[0, 0, 0]} intensity={3} color="#ffaa55" distance={80} />
 
         <Galaxy
-          key={resetKey}
+          key={`${resetKey}-${type}`}
           count={particleCount}
           age={age}
+          type={type}
+          speed={speed}
         />
         <DarkMatterHalo radius={60} />
         <GalacticCenter />
@@ -75,11 +87,26 @@ export function GalacticPlane({ className }: Props) {
       {/* Top label */}
       <div className="pointer-events-none absolute left-3 top-3 space-y-1">
         <div className="rounded border border-secondary/40 bg-black/60 px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-secondary">
-          Galactic Plane · {particleCount.toLocaleString()} bodies
+          {type} · {particleCount.toLocaleString()} bodies
         </div>
         <div className="rounded border border-border bg-black/60 px-2 py-1 font-mono text-[10px] text-muted-foreground">
-          age = <span className="text-primary">{age.toFixed(2)}</span> Gyr · {phaseLabel(age)}
+          age = <span className="text-primary">{age.toFixed(2)}</span> Gyr · {phaseLabel(age, type)}
         </div>
+      </div>
+
+      {/* Galaxy type selector — top right */}
+      <div className="absolute right-3 top-3 flex flex-col gap-1">
+        {GALAXY_TYPES.map((g) => (
+          <Button
+            key={g.id}
+            size="sm"
+            variant={type === g.id ? "default" : "outline"}
+            className="h-7 justify-start font-mono text-[10px]"
+            onClick={() => { setType(g.id); setResetKey((k) => k + 1); }}
+          >
+            {g.label}
+          </Button>
+        ))}
       </div>
 
       {/* Timeline controls */}
@@ -121,12 +148,36 @@ export function GalacticPlane({ className }: Props) {
           <span>arms form</span>
           <span>mature spiral</span>
         </div>
+        <div className="mt-2 flex items-center gap-2">
+          <Label className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+            Time-lapse ×{speed.toFixed(1)}
+          </Label>
+          <Slider
+            className="flex-1"
+            value={[speed]}
+            min={0.1}
+            max={20}
+            step={0.1}
+            onValueChange={(v) => setSpeed(v[0])}
+          />
+        </div>
       </div>
     </div>
   );
 }
 
-function phaseLabel(age: number): string {
+function phaseLabel(age: number, type: GalaxyType): string {
+  if (type === "elliptical") {
+    if (age < 2) return "Major merger remnant cooling";
+    if (age < 6) return "Violent relaxation · stellar mixing";
+    return "Quenched elliptical · old red population";
+  }
+  if (type === "irregular") return "Irregular dwarf · stochastic SF";
+  if (type === "colliding") {
+    if (age < 4) return "Approach phase · tidal tails forming";
+    if (age < 9) return "First passage · starburst";
+    return "Coalescence · merger remnant";
+  }
   if (age < 1) return "Primordial gas cloud collapsing";
   if (age < 3) return "Protogalaxy · halo virialization";
   if (age < 6) return "Disk formation · bar instability";
@@ -134,66 +185,115 @@ function phaseLabel(age: number): string {
   return "Mature barred spiral · ongoing star formation";
 }
 
-function Galaxy({ count, age }: { count: number; age: number }) {
+function Galaxy({
+  count,
+  age,
+  type,
+  speed,
+}: {
+  count: number;
+  age: number;
+  type: GalaxyType;
+  speed: number;
+}) {
   const ref = useRef<THREE.Points>(null);
 
-  // Particle initial conditions seeded once
+  // Particle initial conditions seeded once per (count, type)
   const init = useMemo(() => {
-    const arr: { r0: number; phi0: number; z0: number; arm: number }[] = [];
+    const arr: { r0: number; phi0: number; z0: number; arm: number; sub: number }[] = [];
     for (let i = 0; i < count; i++) {
-      // Radial: exp disk + bulge concentration
       const u = Math.random();
-      const r0 = -Math.log(1 - u * 0.95) * 6 + 0.5;
+      let r0: number, z0: number;
+      let sub = 0;
+      if (type === "elliptical") {
+        // de Vaucouleurs r^(1/4) — extended ellipsoid
+        r0 = Math.pow(-Math.log(1 - u * 0.95), 4) * 0.6 + 0.5;
+        z0 = (Math.random() - 0.5) * r0 * 0.7;
+      } else if (type === "irregular") {
+        // patchy clumps
+        r0 = -Math.log(1 - u * 0.95) * 5 + 0.5;
+        z0 = (Math.random() - 0.5) * 4;
+      } else if (type === "colliding") {
+        // two systems offset along x
+        sub = Math.random() < 0.5 ? -1 : 1;
+        r0 = -Math.log(1 - u * 0.95) * 4 + 0.5;
+        z0 = (Math.random() - 0.5) * Math.exp(-r0 / 6) * 1.2;
+      } else {
+        r0 = -Math.log(1 - u * 0.95) * 6 + 0.5;
+        z0 = (Math.random() - 0.5) * Math.exp(-r0 / 8) * 1.5;
+      }
       const arm = Math.floor(Math.random() * 2);
       const phi0 = Math.random() * Math.PI * 2;
-      const z0 = (Math.random() - 0.5) * Math.exp(-r0 / 8) * 1.5;
-      arr.push({ r0, phi0, z0, arm });
+      arr.push({ r0, phi0, z0, arm, sub });
     }
     return arr;
-  }, [count]);
+  }, [count, type]);
 
   const positions = useMemo(() => new Float32Array(count * 3), [count]);
   const colors = useMemo(() => new Float32Array(count * 3), [count]);
 
   useFrame((state) => {
     if (!ref.current) return;
-    const t = state.clock.elapsedTime;
-    // Maturity: 0 (cloud) → 1 (full spiral)
+    const t = state.clock.elapsedTime * speed;
     const m = Math.min(1, Math.max(0, (age - 0.5) / 8));
 
     for (let i = 0; i < count; i++) {
       const s = init[i];
-      // Cloud-state radial puffiness contracts as galaxy ages
       const puff = (1 - m) * 25;
       const r = s.r0 * (0.4 + 0.6 * m) + puff * (Math.random() - 0.5) * 0.02;
 
-      // Differential rotation: faster inner, slower outer
       const v = 0.6 / Math.sqrt(Math.max(r, 0.5));
       const omega = v / Math.max(r, 0.3);
       const phi = s.phi0 + omega * t * 4;
 
-      // Spiral arm density wave: bias particles toward arm phase
       const armPhase = phi - 0.6 * Math.log(Math.max(r, 0.5));
-      const armBias = m * 0.4 * Math.cos(2 * armPhase + s.arm * Math.PI);
+      const armStrength = type === "spiral" ? 0.4 : type === "irregular" ? 0.1 : 0.0;
+      const armBias = m * armStrength * Math.cos(2 * armPhase + s.arm * Math.PI);
       const r_eff = r + armBias;
 
-      // Vertical thickness
-      const z = s.z0 * (1 - m * 0.7);
+      let x = r_eff * Math.cos(phi);
+      let y = s.z0 * (1 - m * 0.7);
+      let zCoord = r_eff * Math.sin(phi);
 
-      const x = r_eff * Math.cos(phi);
-      const y = z;
-      const zCoord = r_eff * Math.sin(phi);
+      if (type === "elliptical") {
+        // squash along z, no rotation streaks
+        y = s.z0 * 0.8;
+        x = r_eff * Math.cos(phi) * 1.3;
+        zCoord = r_eff * Math.sin(phi);
+      } else if (type === "irregular") {
+        // jitter clumps
+        x += Math.sin(s.phi0 * 7 + t * 0.3) * 1.5;
+        zCoord += Math.cos(s.phi0 * 5 + t * 0.4) * 1.5;
+      } else if (type === "colliding") {
+        // two galaxies approaching, swing-by then merge
+        const sep = 18 * Math.cos(t * 0.05) * Math.exp(-age / 20);
+        x += s.sub * sep;
+        zCoord += s.sub * Math.sin(t * 0.05) * 5;
+      }
+
       positions[i * 3 + 0] = x;
       positions[i * 3 + 1] = y;
       positions[i * 3 + 2] = zCoord;
 
-      // Color: hot blue arm shocks, yellow disk, red bulge
-      const armBoost = Math.max(0, Math.cos(2 * armPhase)) * m;
-      const cloudTint = 1 - m; // purple haze in cloud phase
+      const armBoost = Math.max(0, Math.cos(2 * armPhase)) * m * (type === "spiral" ? 1 : 0);
+      const cloudTint = 1 - m;
       const rad = r / 10;
-      colors[i * 3 + 0] = 0.6 + armBoost * 0.3 + cloudTint * 0.2;
-      colors[i * 3 + 1] = 0.5 + (1 - rad) * 0.3 - cloudTint * 0.2;
-      colors[i * 3 + 2] = 0.4 + armBoost * 0.5 + cloudTint * 0.5;
+      if (type === "elliptical") {
+        // old red population
+        colors[i * 3 + 0] = 0.9;
+        colors[i * 3 + 1] = 0.55;
+        colors[i * 3 + 2] = 0.35;
+      } else if (type === "colliding") {
+        // starburst blue + tidal yellow
+        const burst = Math.sin(s.phi0 * 3 + t) * 0.5 + 0.5;
+        colors[i * 3 + 0] = 0.5 + burst * 0.4;
+        colors[i * 3 + 1] = 0.6 + burst * 0.2;
+        colors[i * 3 + 2] = 0.7 + burst * 0.3;
+      } else {
+        colors[i * 3 + 0] = 0.6 + armBoost * 0.3 + cloudTint * 0.2;
+        colors[i * 3 + 1] = 0.5 + (1 - rad) * 0.3 - cloudTint * 0.2;
+        colors[i * 3 + 2] = 0.4 + armBoost * 0.5 + cloudTint * 0.5;
+      }
     }
 
     const posAttr = ref.current.geometry.attributes.position as THREE.BufferAttribute;

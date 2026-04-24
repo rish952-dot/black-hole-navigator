@@ -28,6 +28,8 @@ export interface BlackHoleParams {
   vectorScale: number;
   thermal: number;
   darkOnly: number;
+  rayBounces: number;
+  timeLapse: number;
 }
 
 export const defaultParams: BlackHoleParams = {
@@ -53,6 +55,8 @@ export const defaultParams: BlackHoleParams = {
   vectorScale: 1.0,
   thermal: 0.0,
   darkOnly: 0.0,
+  rayBounces: 0.0,
+  timeLapse: 1.0,
 };
 
 interface Props {
@@ -87,13 +91,15 @@ export function BlackHoleQuad({ params }: Props) {
       uVectorScale: { value: params.vectorScale },
       uThermal: { value: params.thermal },
       uDarkOnly: { value: params.darkOnly },
+      uRayBounces: { value: params.rayBounces },
+      uTimeLapse: { value: params.timeLapse },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
   useFrame((state) => {
-    const t = state.clock.elapsedTime;
+    const t = state.clock.elapsedTime * (params.timeLapse || 1);
     const u = uniforms;
     u.uTime.value = t;
     u.uResolution.value.set(size.width, size.height);
@@ -115,6 +121,8 @@ export function BlackHoleQuad({ params }: Props) {
     u.uVectorScale.value = params.vectorScale;
     u.uThermal.value = params.thermal;
     u.uDarkOnly.value = params.darkOnly;
+    u.uRayBounces.value = params.rayBounces;
+    u.uTimeLapse.value = params.timeLapse;
 
     const azim = params.cameraOrbit + (params.autoRotate ? t * 0.08 : 0);
     const elev = params.cameraElevation;
