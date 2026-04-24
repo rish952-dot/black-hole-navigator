@@ -87,11 +87,26 @@ export function GalacticPlane({ className }: Props) {
       {/* Top label */}
       <div className="pointer-events-none absolute left-3 top-3 space-y-1">
         <div className="rounded border border-secondary/40 bg-black/60 px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-secondary">
-          Galactic Plane · {particleCount.toLocaleString()} bodies
+          {type} · {particleCount.toLocaleString()} bodies
         </div>
         <div className="rounded border border-border bg-black/60 px-2 py-1 font-mono text-[10px] text-muted-foreground">
-          age = <span className="text-primary">{age.toFixed(2)}</span> Gyr · {phaseLabel(age)}
+          age = <span className="text-primary">{age.toFixed(2)}</span> Gyr · {phaseLabel(age, type)}
         </div>
+      </div>
+
+      {/* Galaxy type selector — top right */}
+      <div className="absolute right-3 top-3 flex flex-col gap-1">
+        {GALAXY_TYPES.map((g) => (
+          <Button
+            key={g.id}
+            size="sm"
+            variant={type === g.id ? "default" : "outline"}
+            className="h-7 justify-start font-mono text-[10px]"
+            onClick={() => { setType(g.id); setResetKey((k) => k + 1); }}
+          >
+            {g.label}
+          </Button>
+        ))}
       </div>
 
       {/* Timeline controls */}
@@ -133,12 +148,36 @@ export function GalacticPlane({ className }: Props) {
           <span>arms form</span>
           <span>mature spiral</span>
         </div>
+        <div className="mt-2 flex items-center gap-2">
+          <Label className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+            Time-lapse ×{speed.toFixed(1)}
+          </Label>
+          <Slider
+            className="flex-1"
+            value={[speed]}
+            min={0.1}
+            max={20}
+            step={0.1}
+            onValueChange={(v) => setSpeed(v[0])}
+          />
+        </div>
       </div>
     </div>
   );
 }
 
-function phaseLabel(age: number): string {
+function phaseLabel(age: number, type: GalaxyType): string {
+  if (type === "elliptical") {
+    if (age < 2) return "Major merger remnant cooling";
+    if (age < 6) return "Violent relaxation · stellar mixing";
+    return "Quenched elliptical · old red population";
+  }
+  if (type === "irregular") return "Irregular dwarf · stochastic SF";
+  if (type === "colliding") {
+    if (age < 4) return "Approach phase · tidal tails forming";
+    if (age < 9) return "First passage · starburst";
+    return "Coalescence · merger remnant";
+  }
   if (age < 1) return "Primordial gas cloud collapsing";
   if (age < 3) return "Protogalaxy · halo virialization";
   if (age < 6) return "Disk formation · bar instability";
