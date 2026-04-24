@@ -249,9 +249,15 @@ const Index = () => {
           <NumSlider label="Orbit" value={current.cameraOrbit} onChange={(v) => update("cameraOrbit", v)} min={0} max={Math.PI * 2} unit=" rad" />
           <NumSlider label="Elevation" value={current.cameraElevation} onChange={(v) => update("cameraElevation", v)} min={-1.4} max={1.4} unit=" rad" />
           <NumSlider label="Exposure" value={current.exposure} onChange={(v) => update("exposure", v)} min={0.2} max={4} />
+          <NumSlider label="Time-lapse ×" value={current.timeLapse} onChange={(v) => update("timeLapse", v)} min={0.1} max={20} step={0.1} />
           <div className="flex items-center justify-between rounded-md border border-border bg-muted/30 p-3">
             <Label className="font-mono text-xs text-muted-foreground">Auto-rotate</Label>
             <Switch checked={current.autoRotate} onCheckedChange={(v) => update("autoRotate", v)} />
+          </div>
+          <div className="rounded-md border border-accent/30 bg-accent/5 p-2 font-mono text-[10px] leading-relaxed text-accent">
+            Time-lapse accelerates simulation clock fed to disk turbulence,
+            spiral phase, frame-drag twist and GW ripple — without changing
+            camera motion. Useful for evolution studies.
           </div>
         </TabsContent>
 
