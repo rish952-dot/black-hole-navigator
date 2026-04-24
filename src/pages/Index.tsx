@@ -453,6 +453,16 @@ const Index = () => {
               <DataMatrix params={current} vectorScale={current.vectorScale} />
             </div>
           )}
+          {view === "disk" && (
+            <div className="mx-auto max-w-5xl">
+              <AccretionDiskStudy
+                mass={current.mass}
+                spin={current.spin}
+                diskInner={current.diskInner}
+                diskOuter={current.diskOuter}
+              />
+            </div>
+          )}
         </div>
 
         {/* Right control panel — desktop */}
