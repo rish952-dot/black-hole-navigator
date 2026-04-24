@@ -278,6 +278,12 @@ const Index = () => {
             ))}
           </div>
           <NumSlider label="Integration steps" value={current.steps} onChange={(v) => update("steps", v)} min={40} max={400} step={1} />
+          <NumSlider label="Ray-trace bounces" value={current.rayBounces} onChange={(v) => update("rayBounces", v)} min={0} max={3} step={1} />
+          <div className="rounded-md border border-primary/30 bg-primary/5 p-2 font-mono text-[10px] leading-relaxed text-primary">
+            UE-style multi-bounce path tracing: each ≥1 enables a secondary
+            disk-surface reflection per primary geodesic hit. Cost scales
+            linearly. Use 0 for fast preview, 2–3 for cinematic.
+          </div>
           <div className="space-y-2 pt-3">
             <Button variant="outline" size="sm" className="w-full font-mono text-xs" onClick={() => setCurrent({ ...defaultParams })}>
               Reset to defaults
