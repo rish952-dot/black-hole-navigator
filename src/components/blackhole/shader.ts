@@ -49,6 +49,8 @@ export const blackHoleFragment = /* glsl */ `
   uniform float uVectorScale;  // 0.25..4 — overall warp / deflection magnitude
   uniform float uThermal;      // 0..1 — thermal false-color disk overlay
   uniform float uDarkOnly;     // 0..1 — show only DM contribution
+  uniform float uRayBounces;   // 0..3 — secondary disk reflection bounces (UE-style PT)
+  uniform float uTimeLapse;    // 0.1..20 — time acceleration multiplier
 
   #define PI 3.14159265359
 
@@ -203,6 +205,17 @@ export const blackHoleFragment = /* glsl */ `
 
           col += emit * (1.0 - alpha);
           alpha += 0.85 * (1.0 - alpha);
+
+          // UE-style secondary path-traced bounce off disk surface back to camera.
+          // Approximates radiation transport between disk + photon sphere.
+          if (uRayBounces > 0.5 && alpha < 0.97) {
+            vec3 nrm = vec3(0.0, sign(prevY) > 0.0 ? 1.0 : -1.0, 0.0);
+            vec3 refl = reflect(v, nrm);
+            float r2 = rh * 1.4;
+            float phi2 = phi + 0.5 + uRayBounces * 0.3;
+            vec3 emit2 = diskEmission(r2 / r_s, phi2, t) * 0.35 * uRayBounces;
+            col += emit2 * (1.0 - alpha) * max(0.0, dot(refl, nrm));
+          }
           if (alpha > 0.98) return vec4(col, 1.0);
         }
       }

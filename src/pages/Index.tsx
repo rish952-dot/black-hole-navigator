@@ -18,6 +18,7 @@ import {
   Waves,
   Table2,
   Sparkles,
+  Disc3,
 } from "lucide-react";
 import { BlackHoleViewport } from "@/components/blackhole/BlackHoleViewport";
 import { SpacetimeGrid } from "@/components/blackhole/SpacetimeGrid";
@@ -28,6 +29,7 @@ import { StarDetails } from "@/components/blackhole/views/StarDetails";
 import { LigoWaveform } from "@/components/blackhole/views/LigoWaveform";
 import { DataMatrix } from "@/components/blackhole/views/DataMatrix";
 import { IOMeshOverlay } from "@/components/blackhole/views/IOMeshOverlay";
+import { AccretionDiskStudy } from "@/components/blackhole/views/AccretionDiskStudy";
 import {
   defaultParams,
   type BlackHoleParams,
@@ -52,7 +54,8 @@ type View =
   | "galaxy"
   | "stars"
   | "ligo"
-  | "matrix";
+  | "matrix"
+  | "disk";
 
 function NumSlider({
   label,
@@ -144,6 +147,7 @@ const Index = () => {
   const VIEW_TABS: { id: View; label: string; icon: typeof Atom }[] = [
     { id: "tunnels", label: "Tunnels", icon: Layers },
     { id: "spacetime", label: "4D Grid", icon: Globe2 },
+    { id: "disk", label: "Disk", icon: Disc3 },
     { id: "galaxy", label: "Galaxy", icon: Sparkles },
     { id: "stars", label: "Stars", icon: Star },
     { id: "ligo", label: "LIGO", icon: Waves },
@@ -245,9 +249,15 @@ const Index = () => {
           <NumSlider label="Orbit" value={current.cameraOrbit} onChange={(v) => update("cameraOrbit", v)} min={0} max={Math.PI * 2} unit=" rad" />
           <NumSlider label="Elevation" value={current.cameraElevation} onChange={(v) => update("cameraElevation", v)} min={-1.4} max={1.4} unit=" rad" />
           <NumSlider label="Exposure" value={current.exposure} onChange={(v) => update("exposure", v)} min={0.2} max={4} />
+          <NumSlider label="Time-lapse ×" value={current.timeLapse} onChange={(v) => update("timeLapse", v)} min={0.1} max={20} step={0.1} />
           <div className="flex items-center justify-between rounded-md border border-border bg-muted/30 p-3">
             <Label className="font-mono text-xs text-muted-foreground">Auto-rotate</Label>
             <Switch checked={current.autoRotate} onCheckedChange={(v) => update("autoRotate", v)} />
+          </div>
+          <div className="rounded-md border border-accent/30 bg-accent/5 p-2 font-mono text-[10px] leading-relaxed text-accent">
+            Time-lapse accelerates simulation clock fed to disk turbulence,
+            spiral phase, frame-drag twist and GW ripple — without changing
+            camera motion. Useful for evolution studies.
           </div>
         </TabsContent>
 
@@ -268,6 +278,12 @@ const Index = () => {
             ))}
           </div>
           <NumSlider label="Integration steps" value={current.steps} onChange={(v) => update("steps", v)} min={40} max={400} step={1} />
+          <NumSlider label="Ray-trace bounces" value={current.rayBounces} onChange={(v) => update("rayBounces", v)} min={0} max={3} step={1} />
+          <div className="rounded-md border border-primary/30 bg-primary/5 p-2 font-mono text-[10px] leading-relaxed text-primary">
+            UE-style multi-bounce path tracing: each ≥1 enables a secondary
+            disk-surface reflection per primary geodesic hit. Cost scales
+            linearly. Use 0 for fast preview, 2–3 for cinematic.
+          </div>
           <div className="space-y-2 pt-3">
             <Button variant="outline" size="sm" className="w-full font-mono text-xs" onClick={() => setCurrent({ ...defaultParams })}>
               Reset to defaults
@@ -435,6 +451,16 @@ const Index = () => {
           {view === "matrix" && (
             <div className="mx-auto max-w-3xl">
               <DataMatrix params={current} vectorScale={current.vectorScale} />
+            </div>
+          )}
+          {view === "disk" && (
+            <div className="mx-auto max-w-5xl">
+              <AccretionDiskStudy
+                mass={current.mass}
+                spin={current.spin}
+                diskInner={current.diskInner}
+                diskOuter={current.diskOuter}
+              />
             </div>
           )}
         </div>
