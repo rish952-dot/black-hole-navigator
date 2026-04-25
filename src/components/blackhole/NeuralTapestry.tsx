@@ -212,6 +212,7 @@ function TapestryMesh({
   onError,
   onFocusRequest,
   onSelect,
+  onHit,
   stateMap,
   selectedIdx,
   layers,
@@ -221,6 +222,13 @@ function TapestryMesh({
   onError: (info: { total: number; broken: number; firstIdx: number | null }) => void;
   onFocusRequest: (p: [number, number, number]) => void;
   onSelect: (idx: number, readout: NodeFieldReadout) => void;
+  onHit?: (hit: {
+    instanceId: number;
+    point: [number, number, number];
+    distance: number;
+    screen: [number, number];
+    timestamp: number;
+  }) => void;
   stateMap: Map<number, NodeState>;
   selectedIdx: number | null;
   layers: LayerToggles;
