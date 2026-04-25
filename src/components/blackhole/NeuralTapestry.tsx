@@ -47,6 +47,47 @@ export function NeuralTapestry({
     firstIdx: number | null;
   }>({ total: 0, broken: 0, firstIdx: null });
 
+  // Per-node selection / control state — light, single-source-of-truth map.
+  const [selected, setSelected] = useState<NodeState | null>(null);
+  const [field, setField] = useState<NodeFieldReadout | null>(null);
+  const stateMap = useRef<Map<number, NodeState>>(new Map());
+  const [, forceTick] = useState(0);
+  const bumpVisuals = useCallback(() => forceTick((n) => n + 1), []);
+
+  const [layers, setLayers] = useState<LayerToggles>({
+    mesh: true,
+    fourD: true,
+    debug: false,
+  });
+
+  const handleSelect = useCallback(
+    (idx: number, readout: NodeFieldReadout) => {
+      const existing = stateMap.current.get(idx);
+      const next: NodeState = existing ?? {
+        index: idx,
+        frozen: false,
+        isolated: false,
+        boost: 0,
+      };
+      stateMap.current.set(idx, next);
+      setSelected({ ...next });
+      setField(readout);
+      setFocusOn(readout.pos);
+    },
+    [],
+  );
+
+  const mutateSelected = useCallback(
+    (mut: (n: NodeState) => NodeState) => {
+      if (!selected) return;
+      const next = mut({ ...stateMap.current.get(selected.index)! });
+      stateMap.current.set(selected.index, next);
+      setSelected({ ...next });
+      bumpVisuals();
+    },
+    [selected, bumpVisuals],
+  );
+
   return (
     <div
       className={cn(
@@ -66,6 +107,10 @@ export function NeuralTapestry({
           errorRate={errorRate}
           onError={(info) => setErrorInfo(info)}
           onFocusRequest={(p) => setFocusOn(p)}
+          onSelect={handleSelect}
+          stateMap={stateMap.current}
+          selectedIdx={selected?.index ?? null}
+          layers={layers}
         />
         <CameraRig focusOn={focusOn} />
         <OrbitControls
@@ -100,10 +145,38 @@ export function NeuralTapestry({
           size="sm"
           variant="outline"
           className="pointer-events-auto h-7 font-mono text-[10px]"
-          onClick={() => setFocusOn([0, 0, 0])}
+          onClick={() => {
+            setFocusOn([0, 0, 0]);
+            setSelected(null);
+            setField(null);
+          }}
         >
           Reset view
         </Button>
+      </div>
+
+      {/* Inspector overlay — bottom-left on mobile, bottom-right on desktop */}
+      <div
+        className={cn(
+          "pointer-events-none absolute bottom-3 z-10",
+          isMobile ? "left-3 right-3" : "right-3",
+        )}
+      >
+        <NodeInspectorPanel
+          state={selected}
+          field={field}
+          layers={layers}
+          onLayersChange={setLayers}
+          onFreeze={() => mutateSelected((n) => ({ ...n, frozen: !n.frozen }))}
+          onIsolate={() => mutateSelected((n) => ({ ...n, isolated: !n.isolated }))}
+          onBoost={(v) => mutateSelected((n) => ({ ...n, boost: v }))}
+          onFocus={() => field && setFocusOn(field.pos)}
+          onClear={() => {
+            setSelected(null);
+            setField(null);
+          }}
+          className={isMobile ? "w-full" : ""}
+        />
       </div>
     </div>
   );
