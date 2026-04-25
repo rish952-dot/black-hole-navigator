@@ -117,6 +117,7 @@ export function NeuralTapestry({
           onError={(info) => setErrorInfo(info)}
           onFocusRequest={(p) => setFocusOn(p)}
           onSelect={handleSelect}
+          onHit={layers.debug ? setHit : undefined}
           stateMap={stateMap.current}
           selectedIdx={selected?.index ?? null}
           layers={layers}
