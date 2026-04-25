@@ -239,13 +239,19 @@ function ProfileGraph({
   color,
   yLabel,
   marker,
+  onHover,
+  onLeave,
+  activeR,
 }: {
-  data: { r: number; T: number; F: number; v: number; lambda: number }[];
+  data: DiskSample[];
   yKey: "T" | "F" | "v" | "lambda";
   label: string;
   color: string;
   yLabel: string;
   marker?: number;
+  onHover?: (state: { activePayload?: { payload: DiskSample }[] } | null) => void;
+  onLeave?: () => void;
+  activeR?: number;
 }) {
   return (
     <div className="rounded-md border border-border bg-card/40 p-2">
@@ -254,7 +260,12 @@ function ProfileGraph({
       </div>
       <div className="h-[140px]">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 4, right: 8, left: -22, bottom: 0 }}>
+          <LineChart
+            data={data}
+            margin={{ top: 4, right: 8, left: -22, bottom: 0 }}
+            onMouseMove={onHover}
+            onMouseLeave={onLeave}
+          >
             <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="2 4" />
             <XAxis
               dataKey="r"
@@ -266,6 +277,7 @@ function ProfileGraph({
               label={{ value: yLabel, fontSize: 9, fill: "hsl(var(--muted-foreground))", angle: -90, position: "insideLeft" }}
             />
             <Tooltip
+              cursor={{ stroke: "hsl(var(--primary))", strokeWidth: 1, strokeDasharray: "2 2" }}
               contentStyle={{
                 background: "hsl(var(--popover))",
                 border: "1px solid hsl(var(--border))",
@@ -276,11 +288,30 @@ function ProfileGraph({
             {marker !== undefined && (
               <ReferenceLine y={marker} stroke="hsl(var(--accent))" strokeDasharray="3 3" />
             )}
+            {activeR !== undefined && (
+              <ReferenceLine x={activeR} stroke="hsl(var(--primary))" strokeDasharray="2 3" strokeOpacity={0.7} />
+            )}
             <Line type="monotone" dataKey={yKey} stroke={color} strokeWidth={1.6} dot={false} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>
     </div>
+  );
+}
+
+function ProbeRing({ radius }: { radius: number }) {
+  const ref = useRef<THREE.Mesh>(null);
+  useFrame((s) => {
+    if (ref.current) {
+      const k = 1 + Math.sin(s.clock.elapsedTime * 6) * 0.04;
+      ref.current.scale.setScalar(k);
+    }
+  });
+  return (
+    <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]}>
+      <ringGeometry args={[radius * 0.985, radius * 1.015, 96]} />
+      <meshBasicMaterial color="#88e0ff" side={THREE.DoubleSide} transparent opacity={0.85} toneMapped={false} />
+    </mesh>
   );
 }
 
