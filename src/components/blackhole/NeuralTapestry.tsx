@@ -416,15 +416,26 @@ function TapestryMesh({
     new Map(),
   );
 
-  const handlePointerDown = useCallback((e: ThreeEvent<PointerEvent>) => {
-    if (e.instanceId === undefined) return;
-    downRef.current.set(e.pointerId, {
-      x: e.nativeEvent.clientX,
-      y: e.nativeEvent.clientY,
-      t: performance.now(),
-      instanceId: e.instanceId,
-    });
-  }, []);
+  const handlePointerDown = useCallback(
+    (e: ThreeEvent<PointerEvent>) => {
+      if (e.instanceId === undefined) return;
+      downRef.current.set(e.pointerId, {
+        x: e.nativeEvent.clientX,
+        y: e.nativeEvent.clientY,
+        t: performance.now(),
+        instanceId: e.instanceId,
+      });
+      // Emit raw raycast hit info for the debug HUD (only when wired).
+      onHit?.({
+        instanceId: e.instanceId,
+        point: [e.point.x, e.point.y, e.point.z],
+        distance: e.distance,
+        screen: [e.nativeEvent.clientX, e.nativeEvent.clientY],
+        timestamp: performance.now(),
+      });
+    },
+    [onHit],
+  );
 
   const handlePointerUp = useCallback(
     (e: ThreeEvent<PointerEvent>) => {
