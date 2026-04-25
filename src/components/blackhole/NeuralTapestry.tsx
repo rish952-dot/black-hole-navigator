@@ -384,19 +384,48 @@ function TapestryMesh({
     }
   });
 
-  // Pointer / touch picking — single click on the InstancedMesh.
-  const handlePointerDown = useCallback(
+  // Robust pointer / touch picking.
+  //
+  // Strategy: on pointerdown we record (x, y, t) per pointerId. We do NOT
+  // stopPropagation here — that lets OrbitControls receive the down/move and
+  // start an orbit drag if the user actually drags. On pointerup, if the
+  // pointer moved less than CLICK_PX and the gesture lasted under CLICK_MS,
+  // we treat it as a tap and run selection. This works for mouse + touch +
+  // pen, and never blocks orbit.
+  const CLICK_PX = 6;
+  const CLICK_MS = 350;
+  const downRef = useRef<Map<number, { x: number; y: number; t: number; instanceId: number | undefined }>>(
+    new Map(),
+  );
+
+  const handlePointerDown = useCallback((e: ThreeEvent<PointerEvent>) => {
+    if (e.instanceId === undefined) return;
+    downRef.current.set(e.pointerId, {
+      x: e.nativeEvent.clientX,
+      y: e.nativeEvent.clientY,
+      t: performance.now(),
+      instanceId: e.instanceId,
+    });
+  }, []);
+
+  const handlePointerUp = useCallback(
     (e: ThreeEvent<PointerEvent>) => {
-      if (e.instanceId === undefined) return;
+      const start = downRef.current.get(e.pointerId);
+      downRef.current.delete(e.pointerId);
+      if (!start || start.instanceId === undefined) return;
+      const dx = e.nativeEvent.clientX - start.x;
+      const dy = e.nativeEvent.clientY - start.y;
+      const dt = performance.now() - start.t;
+      if (Math.hypot(dx, dy) > CLICK_PX || dt > CLICK_MS) return; // it was a drag
+      // Same instance under pointerup as pointerdown? Prefer up's id when defined.
+      const i = e.instanceId ?? start.instanceId;
       e.stopPropagation();
-      const i = e.instanceId;
       const px = positions[i * 3 + 0];
       const py = positions[i * 3 + 1];
       const pz = positions[i * 3 + 2];
       const r = Math.sqrt(px * px + py * py + pz * pz);
       const owners = edgeOwners[i] ?? [];
       const broken = owners.filter((eId) => brokenSet.has(eId)).length;
-      // Mock black-hole-linked field: 1/r potential, sqrt-based redshift, 1/r^3 tidal
       const Rref = 24;
       const potential = -Rref / Math.max(r, 0.5);
       const redshift = 1 - Math.sqrt(Math.max(0, 1 - 2 / Math.max(r, 2.1)));
@@ -414,6 +443,10 @@ function TapestryMesh({
     [positions, edgeOwners, brokenSet, onSelect],
   );
 
+  const handlePointerCancel = useCallback((e: ThreeEvent<PointerEvent>) => {
+    downRef.current.delete(e.pointerId);
+  }, []);
+
   return (
     <>
       {layers.mesh && (
@@ -421,6 +454,9 @@ function TapestryMesh({
           ref={meshRef}
           args={[undefined, undefined, count]}
           onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
+          onPointerLeave={handlePointerCancel}
         >
           <sphereGeometry args={[1, 6, 6]} />
           <meshBasicMaterial toneMapped={false} />
