@@ -60,6 +60,15 @@ export function NeuralTapestry({
     debug: false,
   });
 
+  // Last raycast hit info — only rendered when debug layer is on.
+  const [hit, setHit] = useState<{
+    instanceId: number;
+    point: [number, number, number];
+    distance: number;
+    screen: [number, number];
+    timestamp: number;
+  } | null>(null);
+
   const handleSelect = useCallback(
     (idx: number, readout: NodeFieldReadout) => {
       const existing = stateMap.current.get(idx);
