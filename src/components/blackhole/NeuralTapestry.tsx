@@ -140,6 +140,27 @@ export function NeuralTapestry({
           edges {errorInfo.total.toLocaleString()} ·{" "}
           <span className="text-destructive">broken {errorInfo.broken}</span>
         </div>
+        {layers.debug && (
+          <div className="rounded border border-primary/40 bg-black/70 px-2 py-1 font-mono text-[10px] leading-tight text-primary">
+            <div className="text-[9px] uppercase tracking-widest opacity-60">
+              raycast hit
+            </div>
+            {hit ? (
+              <div className="tabular-nums">
+                <div>id #{hit.instanceId}</div>
+                <div className="text-secondary">
+                  p ({hit.point[0].toFixed(2)}, {hit.point[1].toFixed(2)}, {hit.point[2].toFixed(2)})
+                </div>
+                <div className="text-accent">d = {hit.distance.toFixed(3)}</div>
+                <div className="text-muted-foreground">
+                  scr {hit.screen[0].toFixed(0)}, {hit.screen[1].toFixed(0)}
+                </div>
+              </div>
+            ) : (
+              <div className="text-muted-foreground">— tap a node —</div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="absolute right-3 top-3 flex flex-col items-end gap-2">
