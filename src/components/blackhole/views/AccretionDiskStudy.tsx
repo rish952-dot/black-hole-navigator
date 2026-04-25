@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState, useCallback } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { DiskProbePanel, type DiskSample } from "./DiskProbePanel";
 
 interface Props {
   mass: number;
@@ -83,6 +84,17 @@ export function AccretionDiskStudy({
   const Tmax = profile.reduce((m, p) => Math.max(m, p.T), 0);
   const lambdaMin = profile.reduce((m, p) => Math.min(m, p.lambda), 1e9);
 
+  // Shared cursor across the 4 disk graphs
+  const [hover, setHover] = useState<DiskSample | null>(null);
+  const handleHover = useCallback(
+    (state: { activePayload?: { payload: DiskSample }[] } | null) => {
+      const p = state?.activePayload?.[0]?.payload;
+      setHover(p ?? null);
+    },
+    [],
+  );
+  const handleLeave = useCallback(() => setHover(null), []);
+
   return (
     <div className={cn("space-y-3", className)}>
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -92,75 +104,94 @@ export function AccretionDiskStudy({
         <Stat label="T_max" value={Tmax.toFixed(2)} unit="MK" tone="destructive" />
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        {/* 3D disk visualization */}
-        <div className="h-[280px] overflow-hidden rounded-lg border border-border bg-black">
-          <Canvas
-            gl={{ antialias: true, powerPreference: "high-performance" }}
-            dpr={[1, 1.5]}
-            camera={{ position: [0, 12, 22], fov: 50 }}
-          >
-            <color attach="background" args={["#02030a"]} />
-            <ambientLight intensity={0.3} />
-            <pointLight position={[0, 0, 0]} intensity={5} color="#ffaa55" distance={40} />
-            <DiskMesh
-              mass={mass}
-              spin={spin}
-              diskInner={diskInner}
-              diskOuter={diskOuter}
+      <div className="grid gap-3 lg:grid-cols-[1fr_220px]">
+        <div className="space-y-3">
+          <div className="grid gap-3 md:grid-cols-2">
+            {/* 3D disk visualization */}
+            <div className="relative h-[280px] overflow-hidden rounded-lg border border-border bg-black">
+              <Canvas
+                gl={{ antialias: true, powerPreference: "high-performance" }}
+                dpr={[1, 1.5]}
+                camera={{ position: [0, 12, 22], fov: 50 }}
+              >
+                <color attach="background" args={["#02030a"]} />
+                <ambientLight intensity={0.3} />
+                <pointLight position={[0, 0, 0]} intensity={5} color="#ffaa55" distance={40} />
+                <DiskMesh
+                  mass={mass}
+                  spin={spin}
+                  diskInner={diskInner}
+                  diskOuter={diskOuter}
+                />
+                <EventHorizon r_s={r_s} />
+                <IscoRing r_isco={r_isco} />
+                {hover && <ProbeRing radius={hover.r * r_s} />}
+                <OrbitControls
+                  enableDamping
+                  dampingFactor={0.08}
+                  minDistance={5}
+                  maxDistance={80}
+                  touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
+                />
+              </Canvas>
+              <div className="pointer-events-none absolute left-3 top-3">
+                <Badge variant="outline" className="border-secondary/50 font-mono text-[10px] text-secondary">
+                  Thin-disk · a={spin.toFixed(2)}
+                </Badge>
+              </div>
+            </div>
+
+            {/* Profile graphs */}
+            <div className="space-y-2">
+              <ProfileGraph
+                data={profile}
+                yKey="T"
+                label="T(r) — temperature"
+                color="hsl(var(--destructive))"
+                yLabel="MK"
+                onHover={handleHover}
+                onLeave={handleLeave}
+                activeR={hover?.r}
+              />
+              <ProfileGraph
+                data={profile}
+                yKey="v"
+                label="v_orb(r) / c — Keplerian"
+                color="hsl(var(--primary))"
+                yLabel="c"
+                onHover={handleHover}
+                onLeave={handleLeave}
+                activeR={hover?.r}
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <ProfileGraph
+              data={profile}
+              yKey="F"
+              label="F(r) — radiative flux (Stefan-Boltzmann)"
+              color="hsl(var(--accent))"
+              yLabel="× 10¹⁵ W/m²"
+              onHover={handleHover}
+              onLeave={handleLeave}
+              activeR={hover?.r}
             />
-            <EventHorizon r_s={r_s} />
-            <IscoRing r_isco={r_isco} />
-            <OrbitControls
-              enableDamping
-              dampingFactor={0.08}
-              minDistance={5}
-              maxDistance={80}
-              touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
+            <ProfileGraph
+              data={profile}
+              yKey="lambda"
+              label="λ_peak(r) — Wien displacement"
+              color="hsl(var(--secondary))"
+              yLabel="nm"
+              marker={lambdaMin}
+              onHover={handleHover}
+              onLeave={handleLeave}
+              activeR={hover?.r}
             />
-          </Canvas>
-          <div className="pointer-events-none absolute mt-[-260px] ml-3">
-            <Badge variant="outline" className="border-secondary/50 font-mono text-[10px] text-secondary">
-              Thin-disk · Shakura-Sunyaev · spin a={spin.toFixed(2)}
-            </Badge>
           </div>
         </div>
 
-        {/* Profile graphs */}
-        <div className="space-y-2">
-          <ProfileGraph
-            data={profile}
-            yKey="T"
-            label="T(r) — temperature"
-            color="hsl(var(--destructive))"
-            yLabel="MK"
-          />
-          <ProfileGraph
-            data={profile}
-            yKey="v"
-            label="v_orb(r) / c — Keplerian"
-            color="hsl(var(--primary))"
-            yLabel="c"
-          />
-        </div>
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-2">
-        <ProfileGraph
-          data={profile}
-          yKey="F"
-          label="F(r) — radiative flux (Stefan-Boltzmann)"
-          color="hsl(var(--accent))"
-          yLabel="× 10¹⁵ W/m²"
-        />
-        <ProfileGraph
-          data={profile}
-          yKey="lambda"
-          label="λ_peak(r) — Wien displacement"
-          color="hsl(var(--secondary))"
-          yLabel="nm"
-          marker={lambdaMin}
-        />
+        <DiskProbePanel hover={hover} className="min-h-[280px]" />
       </div>
 
       <div className="rounded-md border border-border bg-muted/30 p-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
@@ -208,13 +239,19 @@ function ProfileGraph({
   color,
   yLabel,
   marker,
+  onHover,
+  onLeave,
+  activeR,
 }: {
-  data: { r: number; T: number; F: number; v: number; lambda: number }[];
+  data: DiskSample[];
   yKey: "T" | "F" | "v" | "lambda";
   label: string;
   color: string;
   yLabel: string;
   marker?: number;
+  onHover?: (state: { activePayload?: { payload: DiskSample }[] } | null) => void;
+  onLeave?: () => void;
+  activeR?: number;
 }) {
   return (
     <div className="rounded-md border border-border bg-card/40 p-2">
@@ -223,7 +260,12 @@ function ProfileGraph({
       </div>
       <div className="h-[140px]">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 4, right: 8, left: -22, bottom: 0 }}>
+          <LineChart
+            data={data}
+            margin={{ top: 4, right: 8, left: -22, bottom: 0 }}
+            onMouseMove={onHover}
+            onMouseLeave={onLeave}
+          >
             <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="2 4" />
             <XAxis
               dataKey="r"
@@ -235,6 +277,7 @@ function ProfileGraph({
               label={{ value: yLabel, fontSize: 9, fill: "hsl(var(--muted-foreground))", angle: -90, position: "insideLeft" }}
             />
             <Tooltip
+              cursor={{ stroke: "hsl(var(--primary))", strokeWidth: 1, strokeDasharray: "2 2" }}
               contentStyle={{
                 background: "hsl(var(--popover))",
                 border: "1px solid hsl(var(--border))",
@@ -245,11 +288,30 @@ function ProfileGraph({
             {marker !== undefined && (
               <ReferenceLine y={marker} stroke="hsl(var(--accent))" strokeDasharray="3 3" />
             )}
+            {activeR !== undefined && (
+              <ReferenceLine x={activeR} stroke="hsl(var(--primary))" strokeDasharray="2 3" strokeOpacity={0.7} />
+            )}
             <Line type="monotone" dataKey={yKey} stroke={color} strokeWidth={1.6} dot={false} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>
     </div>
+  );
+}
+
+function ProbeRing({ radius }: { radius: number }) {
+  const ref = useRef<THREE.Mesh>(null);
+  useFrame((s) => {
+    if (ref.current) {
+      const k = 1 + Math.sin(s.clock.elapsedTime * 6) * 0.04;
+      ref.current.scale.setScalar(k);
+    }
+  });
+  return (
+    <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]}>
+      <ringGeometry args={[radius * 0.985, radius * 1.015, 96]} />
+      <meshBasicMaterial color="#88e0ff" side={THREE.DoubleSide} transparent opacity={0.85} toneMapped={false} />
+    </mesh>
   );
 }
 

@@ -1,11 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  NodeInspectorPanel,
+  type NodeState,
+  type NodeFieldReadout,
+  type LayerToggles,
+} from "./views/NodeInspectorPanel";
 
 interface Props {
   className?: string;
@@ -41,6 +47,47 @@ export function NeuralTapestry({
     firstIdx: number | null;
   }>({ total: 0, broken: 0, firstIdx: null });
 
+  // Per-node selection / control state — light, single-source-of-truth map.
+  const [selected, setSelected] = useState<NodeState | null>(null);
+  const [field, setField] = useState<NodeFieldReadout | null>(null);
+  const stateMap = useRef<Map<number, NodeState>>(new Map());
+  const [, forceTick] = useState(0);
+  const bumpVisuals = useCallback(() => forceTick((n) => n + 1), []);
+
+  const [layers, setLayers] = useState<LayerToggles>({
+    mesh: true,
+    fourD: true,
+    debug: false,
+  });
+
+  const handleSelect = useCallback(
+    (idx: number, readout: NodeFieldReadout) => {
+      const existing = stateMap.current.get(idx);
+      const next: NodeState = existing ?? {
+        index: idx,
+        frozen: false,
+        isolated: false,
+        boost: 0,
+      };
+      stateMap.current.set(idx, next);
+      setSelected({ ...next });
+      setField(readout);
+      setFocusOn(readout.pos);
+    },
+    [],
+  );
+
+  const mutateSelected = useCallback(
+    (mut: (n: NodeState) => NodeState) => {
+      if (!selected) return;
+      const next = mut({ ...stateMap.current.get(selected.index)! });
+      stateMap.current.set(selected.index, next);
+      setSelected({ ...next });
+      bumpVisuals();
+    },
+    [selected, bumpVisuals],
+  );
+
   return (
     <div
       className={cn(
@@ -60,6 +107,10 @@ export function NeuralTapestry({
           errorRate={errorRate}
           onError={(info) => setErrorInfo(info)}
           onFocusRequest={(p) => setFocusOn(p)}
+          onSelect={handleSelect}
+          stateMap={stateMap.current}
+          selectedIdx={selected?.index ?? null}
+          layers={layers}
         />
         <CameraRig focusOn={focusOn} />
         <OrbitControls
@@ -94,10 +145,38 @@ export function NeuralTapestry({
           size="sm"
           variant="outline"
           className="pointer-events-auto h-7 font-mono text-[10px]"
-          onClick={() => setFocusOn([0, 0, 0])}
+          onClick={() => {
+            setFocusOn([0, 0, 0]);
+            setSelected(null);
+            setField(null);
+          }}
         >
           Reset view
         </Button>
+      </div>
+
+      {/* Inspector overlay — bottom-left on mobile, bottom-right on desktop */}
+      <div
+        className={cn(
+          "pointer-events-none absolute bottom-3 z-10",
+          isMobile ? "left-3 right-3" : "right-3",
+        )}
+      >
+        <NodeInspectorPanel
+          state={selected}
+          field={field}
+          layers={layers}
+          onLayersChange={setLayers}
+          onFreeze={() => mutateSelected((n) => ({ ...n, frozen: !n.frozen }))}
+          onIsolate={() => mutateSelected((n) => ({ ...n, isolated: !n.isolated }))}
+          onBoost={(v) => mutateSelected((n) => ({ ...n, boost: v }))}
+          onFocus={() => field && setFocusOn(field.pos)}
+          onClear={() => {
+            setSelected(null);
+            setField(null);
+          }}
+          className={isMobile ? "w-full" : ""}
+        />
       </div>
     </div>
   );
@@ -122,18 +201,24 @@ function TapestryMesh({
   errorRate,
   onError,
   onFocusRequest,
+  onSelect,
+  stateMap,
+  selectedIdx,
+  layers,
 }: {
   count: number;
   errorRate: number;
   onError: (info: { total: number; broken: number; firstIdx: number | null }) => void;
   onFocusRequest: (p: [number, number, number]) => void;
+  onSelect: (idx: number, readout: NodeFieldReadout) => void;
+  stateMap: Map<number, NodeState>;
+  selectedIdx: number | null;
+  layers: LayerToggles;
 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const linesRef = useRef<THREE.LineSegments>(null);
 
-  // Build node positions on a Fibonacci sphere shell + radial noise to make a
-  // 3D topography (mountains/valleys) of parameters.
-  const { positions, edges, colors, brokenIdx, brokenCenter } = useMemo(() => {
+  const { positions, edges, colors, brokenIdx, brokenCenter, edgeOwners, brokenSet } = useMemo(() => {
     const positions = new Float32Array(count * 3);
     const radius = 24;
     for (let i = 0; i < count; i++) {
@@ -147,29 +232,34 @@ function TapestryMesh({
       positions[i * 3 + 2] = r * Math.cos(phi);
     }
 
-    // Build edges: each node connects to ~3 nearest-by-index neighbors
-    // (gives a clean small-world graph at ~3N edges).
     const k = 3;
     const edgeCount = count * k;
     const edgePos = new Float32Array(edgeCount * 6);
     const edgeCol = new Float32Array(edgeCount * 6);
     const broken: number[] = [];
+    const brokenSet = new Set<number>();
     let firstBrokenCenter: [number, number, number] | null = null;
+    // owners[i] = list of edge indices that touch node i
+    const edgeOwners: number[][] = Array.from({ length: count }, () => []);
 
     for (let i = 0; i < count; i++) {
       for (let j = 0; j < k; j++) {
         const nbr = (i + ((j + 1) * 7919)) % count;
-        const idx = (i * k + j) * 6;
+        const eId = i * k + j;
+        const idx = eId * 6;
         edgePos[idx + 0] = positions[i * 3 + 0];
         edgePos[idx + 1] = positions[i * 3 + 1];
         edgePos[idx + 2] = positions[i * 3 + 2];
         edgePos[idx + 3] = positions[nbr * 3 + 0];
         edgePos[idx + 4] = positions[nbr * 3 + 1];
         edgePos[idx + 5] = positions[nbr * 3 + 2];
+        edgeOwners[i].push(eId);
+        edgeOwners[nbr].push(eId);
 
         const isBroken = Math.random() < errorRate;
         if (isBroken) {
-          broken.push(i * k + j);
+          broken.push(eId);
+          brokenSet.add(eId);
           if (!firstBrokenCenter) {
             firstBrokenCenter = [
               (edgePos[idx + 0] + edgePos[idx + 3]) / 2,
@@ -177,11 +267,9 @@ function TapestryMesh({
               (edgePos[idx + 2] + edgePos[idx + 5]) / 2,
             ];
           }
-          // bright red
           edgeCol[idx + 0] = 1.0; edgeCol[idx + 1] = 0.1; edgeCol[idx + 2] = 0.15;
           edgeCol[idx + 3] = 1.0; edgeCol[idx + 4] = 0.1; edgeCol[idx + 5] = 0.15;
         } else {
-          // plasma cyan with mild gradient
           const t = (i / count);
           edgeCol[idx + 0] = 0.1 + t * 0.3; edgeCol[idx + 1] = 0.7; edgeCol[idx + 2] = 1.0;
           edgeCol[idx + 3] = 0.1 + t * 0.3; edgeCol[idx + 4] = 0.7; edgeCol[idx + 5] = 1.0;
@@ -195,10 +283,11 @@ function TapestryMesh({
       colors: edgeCol,
       brokenIdx: broken,
       brokenCenter: firstBrokenCenter,
+      edgeOwners,
+      brokenSet,
     };
   }, [count, errorRate]);
 
-  // Report broken connections + auto-focus
   useEffect(() => {
     onError({
       total: count * 3,
@@ -206,13 +295,12 @@ function TapestryMesh({
       firstIdx: brokenIdx[0] ?? null,
     });
     if (brokenCenter) {
-      // Defer to next tick so Canvas mounts first
       const t = setTimeout(() => onFocusRequest(brokenCenter), 200);
       return () => clearTimeout(t);
     }
   }, [count, brokenIdx, brokenCenter, onError, onFocusRequest]);
 
-  // Build edge geometry once
+  // Edge geometry — rebuilt when isolation state forces hiding edges
   const edgeGeom = useMemo(() => {
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(edges, 3));
@@ -220,45 +308,130 @@ function TapestryMesh({
     return g;
   }, [edges, colors]);
 
-  // Place node instances
+  // Apply node visual state (frozen=blue tint, isolated=dim, boost=scale & glow,
+  // selected=enlarged accent). Re-runs whenever stateMap mutation tick fires.
   useEffect(() => {
     if (!meshRef.current) return;
     const dummy = new THREE.Object3D();
     const colorA = new THREE.Color("#88e0ff");
     const colorB = new THREE.Color("#ff7733");
+    const frozenC = new THREE.Color("#5cc8ff");
+    const isolatedC = new THREE.Color("#444a55");
+    const selectedC = new THREE.Color("#ffffff");
     const tmp = new THREE.Color();
+    const baseScale = 0.18;
     for (let i = 0; i < count; i++) {
+      const st = stateMap.get(i);
+      let scale = baseScale;
+      if (st?.boost) scale *= 1 + st.boost * 0.9;
+      if (i === selectedIdx) scale = Math.max(scale, baseScale * 3.2);
       dummy.position.set(
         positions[i * 3 + 0],
         positions[i * 3 + 1],
         positions[i * 3 + 2],
       );
-      dummy.scale.setScalar(0.18);
+      dummy.scale.setScalar(scale);
       dummy.updateMatrix();
       meshRef.current.setMatrixAt(i, dummy.matrix);
+
       tmp.copy(colorA).lerp(colorB, i / count);
+      if (st?.isolated) tmp.copy(isolatedC);
+      else if (st?.frozen) tmp.copy(frozenC);
+      if (st?.boost && st.boost > 0) tmp.lerp(new THREE.Color("#ffaa44"), st.boost * 0.7);
+      if (st?.boost && st.boost < 0) tmp.multiplyScalar(1 + st.boost * 0.6);
+      if (i === selectedIdx) tmp.copy(selectedC);
       meshRef.current.setColorAt(i, tmp);
     }
     meshRef.current.instanceMatrix.needsUpdate = true;
     if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
-  }, [positions, count]);
+  }, [positions, count, selectedIdx, stateMap]);
 
-  // Subtle rotation
+  // Recolor edges when isolation toggles — hide isolated nodes' edges via alpha=0
+  useEffect(() => {
+    if (!linesRef.current) return;
+    const colAttr = linesRef.current.geometry.getAttribute("color") as THREE.BufferAttribute;
+    const arr = colAttr.array as Float32Array;
+    // reset to base (cheap: re-derive from `colors` reference values + isolation mask)
+    for (let i = 0; i < count; i++) {
+      const isolated = stateMap.get(i)?.isolated;
+      if (!isolated) continue;
+      for (const eId of edgeOwners[i]) {
+        const idx = eId * 6;
+        // dim heavily
+        for (let c = 0; c < 6; c++) arr[idx + c] = colors[idx + c] * 0.08;
+      }
+    }
+    // restore non-isolated to original
+    for (let i = 0; i < count; i++) {
+      if (stateMap.get(i)?.isolated) continue;
+      for (const eId of edgeOwners[i]) {
+        const idx = eId * 6;
+        // only restore if neighbor is also not isolated
+        for (let c = 0; c < 6; c++) arr[idx + c] = colors[idx + c];
+      }
+    }
+    colAttr.needsUpdate = true;
+  }, [count, edgeOwners, colors, stateMap, selectedIdx]);
+
+  // Subtle rotation — frozen nodes don't rotate; we approximate by simply
+  // pausing the whole mesh when selected node is frozen. (Cheap + safe.)
   useFrame((state) => {
-    if (meshRef.current) meshRef.current.rotation.y = state.clock.elapsedTime * 0.04;
-    if (linesRef.current) linesRef.current.rotation.y = state.clock.elapsedTime * 0.04;
+    const sel = selectedIdx !== null ? stateMap.get(selectedIdx) : null;
+    const paused = sel?.frozen;
+    if (!paused) {
+      if (meshRef.current) meshRef.current.rotation.y = state.clock.elapsedTime * 0.04;
+      if (linesRef.current) linesRef.current.rotation.y = state.clock.elapsedTime * 0.04;
+    }
   });
+
+  // Pointer / touch picking — single click on the InstancedMesh.
+  const handlePointerDown = useCallback(
+    (e: ThreeEvent<PointerEvent>) => {
+      if (e.instanceId === undefined) return;
+      e.stopPropagation();
+      const i = e.instanceId;
+      const px = positions[i * 3 + 0];
+      const py = positions[i * 3 + 1];
+      const pz = positions[i * 3 + 2];
+      const r = Math.sqrt(px * px + py * py + pz * pz);
+      const owners = edgeOwners[i] ?? [];
+      const broken = owners.filter((eId) => brokenSet.has(eId)).length;
+      // Mock black-hole-linked field: 1/r potential, sqrt-based redshift, 1/r^3 tidal
+      const Rref = 24;
+      const potential = -Rref / Math.max(r, 0.5);
+      const redshift = 1 - Math.sqrt(Math.max(0, 1 - 2 / Math.max(r, 2.1)));
+      const tidal = 1 / Math.pow(Math.max(r, 1), 3);
+      onSelect(i, {
+        pos: [px, py, pz],
+        rNorm: r / Rref,
+        potential,
+        redshift,
+        tidal,
+        edgeCount: owners.length,
+        brokenEdges: broken,
+      });
+    },
+    [positions, edgeOwners, brokenSet, onSelect],
+  );
 
   return (
     <>
-      <instancedMesh ref={meshRef} args={[undefined, undefined, count]}>
-        <sphereGeometry args={[1, 6, 6]} />
-        <meshBasicMaterial toneMapped={false} />
-      </instancedMesh>
-      <lineSegments ref={linesRef} geometry={edgeGeom}>
-        <lineBasicMaterial vertexColors transparent opacity={0.55} />
-      </lineSegments>
-      {brokenCenter && <BrokenMarker position={brokenCenter} />}
+      {layers.mesh && (
+        <instancedMesh
+          ref={meshRef}
+          args={[undefined, undefined, count]}
+          onPointerDown={handlePointerDown}
+        >
+          <sphereGeometry args={[1, 6, 6]} />
+          <meshBasicMaterial toneMapped={false} />
+        </instancedMesh>
+      )}
+      {layers.fourD && (
+        <lineSegments ref={linesRef} geometry={edgeGeom}>
+          <lineBasicMaterial vertexColors transparent opacity={0.55} />
+        </lineSegments>
+      )}
+      {layers.debug && brokenCenter && <BrokenMarker position={brokenCenter} />}
     </>
   );
 }
