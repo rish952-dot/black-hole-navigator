@@ -60,6 +60,15 @@ export function NeuralTapestry({
     debug: false,
   });
 
+  // Last raycast hit info — only rendered when debug layer is on.
+  const [hit, setHit] = useState<{
+    instanceId: number;
+    point: [number, number, number];
+    distance: number;
+    screen: [number, number];
+    timestamp: number;
+  } | null>(null);
+
   const handleSelect = useCallback(
     (idx: number, readout: NodeFieldReadout) => {
       const existing = stateMap.current.get(idx);
@@ -108,6 +117,7 @@ export function NeuralTapestry({
           onError={(info) => setErrorInfo(info)}
           onFocusRequest={(p) => setFocusOn(p)}
           onSelect={handleSelect}
+          onHit={layers.debug ? setHit : undefined}
           stateMap={stateMap.current}
           selectedIdx={selected?.index ?? null}
           layers={layers}
@@ -130,6 +140,27 @@ export function NeuralTapestry({
           edges {errorInfo.total.toLocaleString()} ·{" "}
           <span className="text-destructive">broken {errorInfo.broken}</span>
         </div>
+        {layers.debug && (
+          <div className="rounded border border-primary/40 bg-black/70 px-2 py-1 font-mono text-[10px] leading-tight text-primary">
+            <div className="text-[9px] uppercase tracking-widest opacity-60">
+              raycast hit
+            </div>
+            {hit ? (
+              <div className="tabular-nums">
+                <div>id #{hit.instanceId}</div>
+                <div className="text-secondary">
+                  p ({hit.point[0].toFixed(2)}, {hit.point[1].toFixed(2)}, {hit.point[2].toFixed(2)})
+                </div>
+                <div className="text-accent">d = {hit.distance.toFixed(3)}</div>
+                <div className="text-muted-foreground">
+                  scr {hit.screen[0].toFixed(0)}, {hit.screen[1].toFixed(0)}
+                </div>
+              </div>
+            ) : (
+              <div className="text-muted-foreground">— tap a node —</div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="absolute right-3 top-3 flex flex-col items-end gap-2">
@@ -202,6 +233,7 @@ function TapestryMesh({
   onError,
   onFocusRequest,
   onSelect,
+  onHit,
   stateMap,
   selectedIdx,
   layers,
@@ -211,6 +243,13 @@ function TapestryMesh({
   onError: (info: { total: number; broken: number; firstIdx: number | null }) => void;
   onFocusRequest: (p: [number, number, number]) => void;
   onSelect: (idx: number, readout: NodeFieldReadout) => void;
+  onHit?: (hit: {
+    instanceId: number;
+    point: [number, number, number];
+    distance: number;
+    screen: [number, number];
+    timestamp: number;
+  }) => void;
   stateMap: Map<number, NodeState>;
   selectedIdx: number | null;
   layers: LayerToggles;
@@ -398,15 +437,26 @@ function TapestryMesh({
     new Map(),
   );
 
-  const handlePointerDown = useCallback((e: ThreeEvent<PointerEvent>) => {
-    if (e.instanceId === undefined) return;
-    downRef.current.set(e.pointerId, {
-      x: e.nativeEvent.clientX,
-      y: e.nativeEvent.clientY,
-      t: performance.now(),
-      instanceId: e.instanceId,
-    });
-  }, []);
+  const handlePointerDown = useCallback(
+    (e: ThreeEvent<PointerEvent>) => {
+      if (e.instanceId === undefined) return;
+      downRef.current.set(e.pointerId, {
+        x: e.nativeEvent.clientX,
+        y: e.nativeEvent.clientY,
+        t: performance.now(),
+        instanceId: e.instanceId,
+      });
+      // Emit raw raycast hit info for the debug HUD (only when wired).
+      onHit?.({
+        instanceId: e.instanceId,
+        point: [e.point.x, e.point.y, e.point.z],
+        distance: e.distance,
+        screen: [e.nativeEvent.clientX, e.nativeEvent.clientY],
+        timestamp: performance.now(),
+      });
+    },
+    [onHit],
+  );
 
   const handlePointerUp = useCallback(
     (e: ThreeEvent<PointerEvent>) => {
