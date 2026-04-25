@@ -98,6 +98,30 @@ export function NeuralTapestry({
     [selected, bumpVisuals],
   );
 
+  // Derive a live TopoField from existing state. Cheap — runs on render only.
+  const topoField: TopoField = useMemo(() => {
+    // Aggregate per-node controls (boost, isolation, frozen) into scalar field.
+    let boostSum = 0;
+    let isolatedCount = 0;
+    let frozenCount = 0;
+    let influenced = 0;
+    stateMap.current.forEach((s) => {
+      if (s.boost !== 0) {
+        boostSum += s.boost;
+        influenced++;
+      }
+      if (s.isolated) isolatedCount++;
+      if (s.frozen) frozenCount++;
+    });
+    const energy = Math.min(1.5, 0.4 + Math.abs(boostSum) * 0.3 + influenced * 0.05);
+    const stability = Math.max(0, 1 - (isolatedCount * 0.08 + errorInfo.broken * 0.05));
+    // Curvature spikes when a node is selected (focus a "well" under it).
+    const curvature = selected ? 1.0 + (selected.boost * 0.4 || 0) : 0.5;
+    const flowAngle = (frozenCount * 0.7) % (Math.PI * 2);
+    const anomalies = Math.min(6, errorInfo.broken);
+    return { curvature, energyDensity: energy, stability, flowAngle, anomalies };
+  }, [selected, errorInfo]);
+
   return (
     <div
       className={cn(
@@ -112,6 +136,14 @@ export function NeuralTapestry({
       >
         <color attach="background" args={["#020410"]} />
         <ambientLight intensity={0.6} />
+        {/* Topography surface — additive layer, sits behind the tapestry. */}
+        {layers.fourD && (
+          <MeshTopographyLayer
+            field={topoField}
+            resolution={isMobile ? 64 : 128}
+            wireframe={layers.debug}
+          />
+        )}
         <TapestryMesh
           count={count}
           errorRate={errorRate}
