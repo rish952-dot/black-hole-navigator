@@ -124,13 +124,23 @@ export function NeuralTapestry({
       if (s.isolated) isolatedCount++;
       if (s.frozen) frozenCount++;
     });
-    const energy = Math.min(1.5, 0.4 + Math.abs(boostSum) * 0.3 + influenced * 0.05);
-    const stability = Math.max(0, 1 - (isolatedCount * 0.08 + errorInfo.broken * 0.05));
-    // Curvature spikes when a node is selected (focus a "well" under it).
-    const curvature = selected ? 1.0 + (selected.boost * 0.4 || 0) : 0.5;
-    const flowAngle = (frozenCount * 0.7) % (Math.PI * 2);
+    const baseEnergy = Math.min(1.5, 0.4 + Math.abs(boostSum) * 0.3 + influenced * 0.05);
+    const baseStability = Math.max(0, 1 - (isolatedCount * 0.08 + errorInfo.broken * 0.05));
+    const baseCurvature = selected ? 1.0 + (selected.boost * 0.4 || 0) : 0.5;
+    const baseFlowAngle = (frozenCount * 0.7) % (Math.PI * 2);
     const anomalies = Math.min(6, errorInfo.broken);
-    return { curvature, energyDensity: energy, stability, flowAngle, anomalies };
+
+    // Apply manual controls — multiplicative for magnitudes, additive for angle.
+    const k = topoCtl.intensity;
+    return {
+      curvature: baseCurvature * topoCtl.curvature * k,
+      energyDensity: baseEnergy * topoCtl.energy * k,
+      // Stability blends the user override toward the derived baseline.
+      stability: Math.max(0, Math.min(1, baseStability * topoCtl.stability)),
+      flowAngle: (baseFlowAngle + topoCtl.flowAngle) % (Math.PI * 2),
+      anomalies,
+    };
+  }, [selected, errorInfo, topoCtl]);
   }, [selected, errorInfo]);
 
   return (
