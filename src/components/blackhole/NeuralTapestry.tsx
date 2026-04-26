@@ -280,7 +280,7 @@ export function NeuralTapestry({
         {/* Cinematic post-processing — Unreal/Ubisoft-style stack.
             Disabled on the lowest LOD tier to keep mobile responsive. */}
         {!lod.reduced && (
-          <EffectComposer multisampling={isMobile ? 0 : 2} disableNormalPass>
+          <EffectComposer multisampling={isMobile ? 0 : 2}>
             <Bloom
               intensity={isMobile ? 0.5 : 0.9}
               luminanceThreshold={0.35}
@@ -288,7 +288,7 @@ export function NeuralTapestry({
               mipmapBlur
             />
             <ChromaticAberration
-              offset={[0.0008, 0.0012]}
+              offset={new THREE.Vector2(0.0008, 0.0012)}
               radialModulation={false}
               modulationOffset={0}
               blendFunction={BlendFunction.NORMAL}
