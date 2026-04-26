@@ -69,6 +69,7 @@ export function MeshTopographyLayer({
   size = 60,
   resolution = 128,
   field,
+  influences,
   wireframe = false,
   yOffset = -8,
 }: Props) {
