@@ -452,6 +452,36 @@ function TapestryMesh({
     colAttr.needsUpdate = true;
   }, [count, edgeOwners, colors, stateMap, selectedIdx]);
 
+  // Emit node-influence list to the topography layer.
+  // Active = selected, frozen, isolated (negative weight), or boosted.
+  // Projects 3D node position to topo's local XZ plane (the layer is rotated
+  // flat onto Y, so we feed (worldX, worldZ) directly).
+  useEffect(() => {
+    if (!onInfluences) return;
+    const out: NodeInfluence[] = [];
+    const push = (idx: number, weight: number, radius: number) => {
+      if (out.length >= 16) return;
+      const x = positions[idx * 3 + 0];
+      const z = positions[idx * 3 + 2];
+      out.push({ x, z, weight, radius });
+    };
+    stateMap.forEach((st, idx) => {
+      let w = 0;
+      let r = 3.0;
+      if (st.boost) { w += st.boost * 1.4; r = 3.5; }
+      if (st.frozen) { w += 0.4; r = 2.5; }
+      if (st.isolated) { w -= 0.6; r = 4.0; }
+      if (idx === selectedIdx) { w += 0.8; r = Math.max(r, 4.5); }
+      if (Math.abs(w) > 0.01) push(idx, w, r);
+    });
+    // Always include selected even if no other state — so the user sees the
+    // surface respond immediately on tap.
+    if (selectedIdx !== null && !stateMap.get(selectedIdx)) {
+      push(selectedIdx, 0.6, 4.0);
+    }
+    onInfluences(out);
+  }, [positions, stateMap, selectedIdx, onInfluences]);
+
   // Subtle rotation — frozen nodes don't rotate; we approximate by simply
   // pausing the whole mesh when selected node is frozen. (Cheap + safe.)
   useFrame((state) => {
