@@ -143,6 +143,7 @@ export function NeuralTapestry({
         {layers.fourD && (
           <MeshTopographyLayer
             field={topoField}
+            influences={influences}
             resolution={isMobile ? 64 : 128}
             wireframe={layers.debug}
           />
@@ -154,6 +155,7 @@ export function NeuralTapestry({
           onFocusRequest={(p) => setFocusOn(p)}
           onSelect={handleSelect}
           onHit={layers.debug ? setHit : undefined}
+          onInfluences={setInfluences}
           stateMap={stateMap.current}
           selectedIdx={selected?.index ?? null}
           layers={layers}
