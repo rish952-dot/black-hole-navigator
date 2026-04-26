@@ -251,12 +251,16 @@ export function MeshTopographyLayer({
           // Energy adds overall emissive.
           float emissive = uEnergy * 0.4;
 
-          vec3 col = base + glow * (0.6 + h * 0.9) + band * cool + anomalyC;
+          // Node-influence aura — gold/teal halo where active nodes sit.
+          vec3 nodeC = vec3(1.00, 0.85, 0.35);
+          vec3 nodeAura = nodeC * vNodePulse * 1.4;
+
+          vec3 col = base + glow * (0.6 + h * 0.9) + band * cool + anomalyC + nodeAura;
           col *= vignette;
           col += emissive * cool * vignette;
 
           // Alpha — additive blending, so this is intensity not opacity.
-          float alpha = (0.20 + h * 0.55 + vAnomaly * 0.4 + band * 0.3) * vignette;
+          float alpha = (0.20 + h * 0.55 + vAnomaly * 0.4 + band * 0.3 + vNodePulse * 0.5) * vignette;
 
           gl_FragColor = vec4(col, alpha);
         }
