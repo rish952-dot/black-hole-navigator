@@ -15,6 +15,22 @@ export interface TopoField {
   anomalies: number;
 }
 
+/**
+ * A single node's influence on the topology surface.
+ * Position is in topology-local XZ (world XZ after the layer is rotated flat).
+ * Weight is signed: positive lifts the surface, negative depresses it.
+ * Radius controls the gaussian falloff (default ~3 world units).
+ */
+export interface NodeInfluence {
+  x: number;
+  z: number;
+  weight: number;
+  radius?: number;
+}
+
+/** Hard cap to keep the uniform array bounded for mobile GPUs. */
+export const MAX_INFLUENCES = 16;
+
 interface Props {
   /** Side length in world units (default 60 — covers the 24-radius tapestry). */
   size?: number;
@@ -22,6 +38,8 @@ interface Props {
   resolution?: number;
   /** Live field readout — typically derived from BlackHoleParams + node state. */
   field: TopoField;
+  /** Per-node deformations applied additively on top of the field shader. */
+  influences?: NodeInfluence[];
   /** Show wireframe instead of filled surface. */
   wireframe?: boolean;
   /** Visual layer position offset on Y (default -8 — below the tapestry). */
