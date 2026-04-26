@@ -58,7 +58,8 @@ export function NeuralTapestry({
   errorRate = 0.003,
 }: Props) {
   const isMobile = useIsMobile();
-  const count = nodeCount ?? (isMobile ? 3000 : 30000);
+  // +1000 nodes baseline lift for higher fidelity. Mobile cap respects perf.
+  const count = nodeCount ?? (isMobile ? 4000 : 31000);
   // Mobile boots in "med" tier; desktop in "high". Hook re-evaluates on FPS.
   const lod = useAdaptiveLOD({ initialTier: isMobile ? "med" : "high" });
   const [focusOn, setFocusOn] = useState<[number, number, number] | null>(null);
