@@ -15,6 +15,22 @@ export interface TopoField {
   anomalies: number;
 }
 
+/**
+ * A single node's influence on the topology surface.
+ * Position is in topology-local XZ (world XZ after the layer is rotated flat).
+ * Weight is signed: positive lifts the surface, negative depresses it.
+ * Radius controls the gaussian falloff (default ~3 world units).
+ */
+export interface NodeInfluence {
+  x: number;
+  z: number;
+  weight: number;
+  radius?: number;
+}
+
+/** Hard cap to keep the uniform array bounded for mobile GPUs. */
+export const MAX_INFLUENCES = 16;
+
 interface Props {
   /** Side length in world units (default 60 — covers the 24-radius tapestry). */
   size?: number;
@@ -22,6 +38,8 @@ interface Props {
   resolution?: number;
   /** Live field readout — typically derived from BlackHoleParams + node state. */
   field: TopoField;
+  /** Per-node deformations applied additively on top of the field shader. */
+  influences?: NodeInfluence[];
   /** Show wireframe instead of filled surface. */
   wireframe?: boolean;
   /** Visual layer position offset on Y (default -8 — below the tapestry). */
@@ -51,6 +69,7 @@ export function MeshTopographyLayer({
   size = 60,
   resolution = 128,
   field,
+  influences,
   wireframe = false,
   yOffset = -8,
 }: Props) {
@@ -78,7 +97,16 @@ export function MeshTopographyLayer({
         uFlowAngle: { value: field.flowAngle },
         uAnomalies: { value: field.anomalies },
         uSize: { value: size },
+        uInfluenceCount: { value: 0 },
+        // vec3 per slot: (x, z, weight). radius packed into a parallel array.
+        uInfluencePos: {
+          value: Array.from({ length: MAX_INFLUENCES }, () => new THREE.Vector3()),
+        },
+        uInfluenceRadius: {
+          value: new Float32Array(MAX_INFLUENCES),
+        },
       },
+      defines: { MAX_INFLUENCES: MAX_INFLUENCES },
       vertexShader: /* glsl */ `
         uniform float uTime;
         uniform float uCurvature;
@@ -87,11 +115,15 @@ export function MeshTopographyLayer({
         uniform float uFlowAngle;
         uniform float uAnomalies;
         uniform float uSize;
+        uniform int   uInfluenceCount;
+        uniform vec3  uInfluencePos[MAX_INFLUENCES];
+        uniform float uInfluenceRadius[MAX_INFLUENCES];
 
         varying float vHeight;
         varying float vRadial;
         varying float vFlow;
         varying float vAnomaly;
+        varying float vNodePulse;
         varying vec2  vUv;
 
         // Cheap hash noise — no textures, GPU friendly.
@@ -153,11 +185,28 @@ export function MeshTopographyLayer({
             }
           }
 
-          pos.y += well + wave + turb + flow + anomaly * 1.2;
+          // 6) NODE INFLUENCE — gaussian wells/peaks under selected/boosted
+          //    nodes. GPU-side, bounded loop, mobile safe.
+          float nodeDisp = 0.0;
+          float nodePulse = 0.0;
+          for (int i = 0; i < MAX_INFLUENCES; i++) {
+            if (i >= uInfluenceCount) break;
+            vec3 inf = uInfluencePos[i];           // (x, z, weight)
+            float rad = max(uInfluenceRadius[i], 0.5);
+            vec2 d = pos.xz - inf.xy;
+            float g = exp(-dot(d, d) / (rad * rad));
+            // Subtle breathing so active nodes feel alive.
+            float breathe = 0.85 + 0.15 * sin(uTime * 2.0 + float(i) * 1.7);
+            nodeDisp  += inf.z * g * 1.6 * breathe;
+            nodePulse += g * abs(inf.z);
+          }
+
+          pos.y += well + wave + turb + flow + anomaly * 1.2 + nodeDisp;
 
           vHeight = pos.y;
           vRadial = rNorm;
           vAnomaly = anomaly;
+          vNodePulse = nodePulse;
 
           gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
         }
@@ -173,6 +222,7 @@ export function MeshTopographyLayer({
         varying float vRadial;
         varying float vFlow;
         varying float vAnomaly;
+        varying float vNodePulse;
         varying vec2  vUv;
 
         void main() {
@@ -201,12 +251,16 @@ export function MeshTopographyLayer({
           // Energy adds overall emissive.
           float emissive = uEnergy * 0.4;
 
-          vec3 col = base + glow * (0.6 + h * 0.9) + band * cool + anomalyC;
+          // Node-influence aura — gold/teal halo where active nodes sit.
+          vec3 nodeC = vec3(1.00, 0.85, 0.35);
+          vec3 nodeAura = nodeC * vNodePulse * 1.4;
+
+          vec3 col = base + glow * (0.6 + h * 0.9) + band * cool + anomalyC + nodeAura;
           col *= vignette;
           col += emissive * cool * vignette;
 
           // Alpha — additive blending, so this is intensity not opacity.
-          float alpha = (0.20 + h * 0.55 + vAnomaly * 0.4 + band * 0.3) * vignette;
+          float alpha = (0.20 + h * 0.55 + vAnomaly * 0.4 + band * 0.3 + vNodePulse * 0.5) * vignette;
 
           gl_FragColor = vec4(col, alpha);
         }
@@ -226,6 +280,26 @@ export function MeshTopographyLayer({
     u.uStability.value += (field.stability - u.uStability.value) * 0.08;
     u.uFlowAngle.value += (field.flowAngle - u.uFlowAngle.value) * 0.08;
     u.uAnomalies.value += (field.anomalies - u.uAnomalies.value) * 0.12;
+
+    // Push node influences as packed vec3(x, z, weight) + parallel radius.
+    // Smoothed toward target so toggles don't pop.
+    const list = influences ?? [];
+    const n = Math.min(list.length, MAX_INFLUENCES);
+    const posArr = u.uInfluencePos.value as THREE.Vector3[];
+    const radArr = u.uInfluenceRadius.value as Float32Array;
+    for (let i = 0; i < MAX_INFLUENCES; i++) {
+      const target = i < n ? list[i] : null;
+      const tx = target ? target.x : 0;
+      const tz = target ? target.z : 0;
+      const tw = target ? target.weight : 0;
+      const tr = target ? target.radius ?? 3.0 : 3.0;
+      const v = posArr[i];
+      v.x += (tx - v.x) * 0.18;
+      v.y += (tz - v.y) * 0.18; // .y stores Z (we pack as vec3(x,z,w))
+      v.z += (tw - v.z) * 0.18;
+      radArr[i] += (tr - radArr[i]) * 0.18;
+    }
+    u.uInfluenceCount.value = n;
   });
 
   return (
