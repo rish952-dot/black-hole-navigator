@@ -78,6 +78,9 @@ export function NeuralTapestry({
   // Live node-influence list driving the topography layer (GPU uniform).
   const [influences, setInfluences] = useState<NodeInfluence[]>([]);
 
+  // Manual topography overrides — sliders multiply into the derived field.
+  const [topoCtl, setTopoCtl] = useState<TopoControls>(DEFAULT_TOPO_CONTROLS);
+
   const handleSelect = useCallback(
     (idx: number, readout: NodeFieldReadout) => {
       const existing = stateMap.current.get(idx);
