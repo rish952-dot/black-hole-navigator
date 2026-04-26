@@ -141,7 +141,6 @@ export function NeuralTapestry({
       anomalies,
     };
   }, [selected, errorInfo, topoCtl]);
-  }, [selected, errorInfo]);
 
   return (
     <div
