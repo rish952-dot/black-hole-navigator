@@ -217,7 +217,7 @@ export function NeuralTapestry({
   );
 
   const getSnapshot = useCallback(() => snapshotRef.current, []);
-  const { lastTick: aiLastTick, requestCount: aiReqCount, lastError: aiHookError } = useAINodes({
+  const { requestCount: aiReqCount, lastError: aiHookError } = useAINodes({
     intervalMs: 3000,
     disabled: !aiEnabled,
     getSnapshot,
