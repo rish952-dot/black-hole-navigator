@@ -272,6 +272,7 @@ function TapestryMesh({
   onFocusRequest,
   onSelect,
   onHit,
+  onInfluences,
   stateMap,
   selectedIdx,
   layers,
@@ -288,6 +289,7 @@ function TapestryMesh({
     screen: [number, number];
     timestamp: number;
   }) => void;
+  onInfluences?: (list: NodeInfluence[]) => void;
   stateMap: Map<number, NodeState>;
   selectedIdx: number | null;
   layers: LayerToggles;
