@@ -174,6 +174,59 @@ export function NeuralTapestry({
     };
   }, [selected, errorInfo, topoCtl]);
 
+  // Keep snapshot ref fresh — read by the AI poll loop without re-binding it.
+  useEffect(() => {
+    snapshotRef.current = {
+      curvature: topoField.curvature,
+      energyDensity: topoField.energyDensity,
+      stability: topoField.stability,
+      flowAngle: topoField.flowAngle,
+      anomalies: topoField.anomalies,
+      fps: lod.fps,
+      brokenEdges: errorInfo.broken,
+      totalNodes: count,
+    };
+  }, [topoField, lod.fps, errorInfo.broken, count]);
+
+  // Apply AI directives — each targets one of the 6 AI nodes (idx count..count+5).
+  const applyDirectives = useCallback(
+    (directives: AIDirective[]) => {
+      setAiDirectives(directives);
+      setAiError(null);
+      directives.forEach((d) => {
+        const idx = count + Math.max(0, Math.min(AI_NODE_COUNT - 1, d.nodeId));
+        const cur = stateMap.current.get(idx) ?? {
+          index: idx,
+          frozen: false,
+          isolated: false,
+          boost: 0,
+        };
+        const next: NodeState = { ...cur };
+        switch (d.action) {
+          case "boost":   next.boost = d.intensity; next.frozen = false; break;
+          case "freeze":  next.frozen = true; break;
+          case "isolate": next.isolated = true; break;
+          case "release": next.frozen = false; next.isolated = false; next.boost = 0; break;
+          case "anomaly": next.boost = Math.max(next.boost, 0.6); next.isolated = true; break;
+        }
+        stateMap.current.set(idx, next);
+      });
+      bumpVisuals();
+    },
+    [count, bumpVisuals],
+  );
+
+  const getSnapshot = useCallback(() => snapshotRef.current, []);
+  const { lastTick: aiLastTick, requestCount: aiReqCount, lastError: aiHookError } = useAINodes({
+    intervalMs: 3000,
+    disabled: !aiEnabled,
+    getSnapshot,
+    onDirectives: applyDirectives,
+  });
+  useEffect(() => {
+    if (aiHookError) setAiError(aiHookError);
+  }, [aiHookError]);
+
   return (
     <div
       className={cn(
