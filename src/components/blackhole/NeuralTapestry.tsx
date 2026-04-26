@@ -13,6 +13,7 @@ import {
   type LayerToggles,
 } from "./views/NodeInspectorPanel";
 import { MeshTopographyLayer, type TopoField, type NodeInfluence } from "./MeshTopographyLayer";
+import { useAdaptiveLOD } from "./useAdaptiveLOD";
 import {
   TopoControlPanel,
   DEFAULT_TOPO_CONTROLS,
@@ -46,6 +47,8 @@ export function NeuralTapestry({
 }: Props) {
   const isMobile = useIsMobile();
   const count = nodeCount ?? (isMobile ? 3000 : 30000);
+  // Mobile boots in "med" tier; desktop in "high". Hook re-evaluates on FPS.
+  const lod = useAdaptiveLOD({ initialTier: isMobile ? "med" : "high" });
   const [focusOn, setFocusOn] = useState<[number, number, number] | null>(null);
   const [errorInfo, setErrorInfo] = useState<{
     total: number;
@@ -161,7 +164,8 @@ export function NeuralTapestry({
           <MeshTopographyLayer
             field={topoField}
             influences={influences}
-            resolution={isMobile ? 64 : 128}
+            resolution={lod.topoResolution}
+            updateInterval={lod.topoUpdateInterval}
             wireframe={layers.debug}
           />
         )}
@@ -194,6 +198,16 @@ export function NeuralTapestry({
         <div className="rounded border border-border bg-black/60 px-2 py-1 font-mono text-[10px] text-muted-foreground">
           edges {errorInfo.total.toLocaleString()} ·{" "}
           <span className="text-destructive">broken {errorInfo.broken}</span>
+        </div>
+        <div
+          className={cn(
+            "rounded border bg-black/60 px-2 py-1 font-mono text-[10px] tabular-nums",
+            lod.tier === "high" && "border-secondary/40 text-secondary",
+            lod.tier === "med" && "border-accent/40 text-accent",
+            lod.tier === "low" && "border-destructive/40 text-destructive",
+          )}
+        >
+          lod {lod.tier} · {lod.fps}fps · res {lod.topoResolution}
         </div>
         {layers.debug && (
           <div className="rounded border border-primary/40 bg-black/70 px-2 py-1 font-mono text-[10px] leading-tight text-primary">

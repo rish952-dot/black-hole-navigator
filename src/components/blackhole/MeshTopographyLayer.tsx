@@ -44,6 +44,12 @@ interface Props {
   wireframe?: boolean;
   /** Visual layer position offset on Y (default -8 — below the tapestry). */
   yOffset?: number;
+  /**
+   * Minimum ms between JS-side uniform updates. 0 = every frame.
+   * Higher values reduce CPU work on low-end devices; the GPU keeps
+   * rendering at full framerate, only smoothing toward target slows.
+   */
+  updateInterval?: number;
 }
 
 /**
@@ -72,6 +78,7 @@ export function MeshTopographyLayer({
   influences,
   wireframe = false,
   yOffset = -8,
+  updateInterval = 0,
 }: Props) {
   const meshRef = useRef<THREE.Mesh>(null);
   const matRef = useRef<THREE.ShaderMaterial>(null);
@@ -271,9 +278,19 @@ export function MeshTopographyLayer({
 
   matRef.current = material;
 
-  useFrame((state, dt) => {
+  // Throttle accumulator — counts ms since last full smoothing pass.
+  const accRef = useRef(0);
+
+  useFrame((_state, dt) => {
     const u = material.uniforms;
+    // uTime always advances so shader animations stay smooth even when
+    // we throttle JS-side smoothing of field uniforms.
     u.uTime.value += dt;
+
+    accRef.current += dt * 1000;
+    if (updateInterval > 0 && accRef.current < updateInterval) return;
+    accRef.current = 0;
+
     // Smooth uniforms toward current field — avoids visual jumps when params change.
     u.uCurvature.value += (field.curvature - u.uCurvature.value) * 0.08;
     u.uEnergy.value += (field.energyDensity - u.uEnergy.value) * 0.08;
