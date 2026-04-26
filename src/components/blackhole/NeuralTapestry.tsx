@@ -734,7 +734,134 @@ function TapestryMesh({
         </lineSegments>
       )}
       {layers.debug && brokenCenter && <BrokenMarker position={brokenCenter} />}
+      <AINodeRing
+        baseIdx={count}
+        nodeCount={aiNodeCount}
+        stateMap={stateMap}
+        onSelect={(absIdx, pos) => {
+          const Rref = 24;
+          const r = Math.hypot(pos[0], pos[1], pos[2]);
+          onSelect(absIdx, {
+            pos,
+            rNorm: r / Rref,
+            potential: -Rref / Math.max(r, 0.5),
+            redshift: 1 - Math.sqrt(Math.max(0, 1 - 2 / Math.max(r, 2.1))),
+            tidal: 1 / Math.pow(Math.max(r, 1), 3),
+            edgeCount: 0,
+            brokenEdges: 0,
+          });
+        }}
+      />
     </>
+  );
+}
+
+/**
+ * AINodeRing — six dedicated AI control nodes arranged in an inner equatorial
+ * ring. Larger, emissive, and pulsing so they read as distinct from the 30k+
+ * parameter nodes. Their state lives in the same `stateMap` (indexed
+ * baseIdx..baseIdx+nodeCount-1) so directives applied by the AI loop affect
+ * their visual scale and color via the same boost/freeze/isolate pipeline.
+ */
+function AINodeRing({
+  baseIdx,
+  nodeCount,
+  stateMap,
+  onSelect,
+}: {
+  baseIdx: number;
+  nodeCount: number;
+  stateMap: Map<number, NodeState>;
+  onSelect: (absIdx: number, pos: [number, number, number]) => void;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+  const innerRadius = 14;
+
+  // Static positions on a tilted ring — never re-computed.
+  const positions = useMemo(() => {
+    return Array.from({ length: nodeCount }, (_, i) => {
+      const angle = (i / nodeCount) * Math.PI * 2;
+      const tilt = 0.35;
+      return [
+        innerRadius * Math.cos(angle),
+        innerRadius * Math.sin(angle) * tilt,
+        innerRadius * Math.sin(angle),
+      ] as [number, number, number];
+    });
+  }, [nodeCount]);
+
+  // Slow counter-rotation so the AI ring feels like a distinct subsystem.
+  useFrame((s) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y = -s.clock.elapsedTime * 0.12;
+    }
+  });
+
+  return (
+    <group ref={groupRef}>
+      {positions.map((p, i) => {
+        const absIdx = baseIdx + i;
+        const st = stateMap.get(absIdx);
+        const isFrozen = st?.frozen;
+        const isIsolated = st?.isolated;
+        const boost = st?.boost ?? 0;
+        const baseColor = isIsolated
+          ? "#5c6273"
+          : isFrozen
+          ? "#5cc8ff"
+          : boost > 0.3
+          ? "#ffaa44"
+          : "#a87bff"; // signature AI violet
+        const scale = 0.55 + Math.abs(boost) * 0.5;
+        return (
+          <group
+            key={absIdx}
+            position={p}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onSelect(absIdx, p);
+            }}
+          >
+            <mesh>
+              <icosahedronGeometry args={[scale, 1]} />
+              <meshBasicMaterial color={baseColor} toneMapped={false} />
+            </mesh>
+            <AIPulseRing color={baseColor} radius={scale * 1.8} phase={i * 0.7} />
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
+function AIPulseRing({
+  color,
+  radius,
+  phase,
+}: {
+  color: string;
+  radius: number;
+  phase: number;
+}) {
+  const ref = useRef<THREE.Mesh>(null);
+  useFrame((s) => {
+    if (!ref.current) return;
+    const k = 1 + Math.sin(s.clock.elapsedTime * 1.6 + phase) * 0.18;
+    ref.current.scale.setScalar(k);
+    const m = ref.current.material as THREE.MeshBasicMaterial;
+    m.opacity = 0.35 + 0.35 * (0.5 + 0.5 * Math.sin(s.clock.elapsedTime * 1.6 + phase));
+  });
+  return (
+    <mesh ref={ref} rotation={[Math.PI / 2, 0, 0]}>
+      <ringGeometry args={[radius * 0.95, radius, 32]} />
+      <meshBasicMaterial
+        color={color}
+        toneMapped={false}
+        transparent
+        opacity={0.5}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
   );
 }
 
