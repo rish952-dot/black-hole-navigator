@@ -366,6 +366,36 @@ export function NeuralTapestry({
         >
           Reset view
         </Button>
+        {/* AI control loop status — clickable to toggle on/off. */}
+        <button
+          onClick={() => setAiEnabled((v) => !v)}
+          className={cn(
+            "pointer-events-auto rounded border px-2 py-1 font-mono text-[10px] tabular-nums backdrop-blur-md",
+            aiEnabled
+              ? "border-[hsl(265_70%_70%)] bg-[hsl(265_70%_70%/0.1)] text-[hsl(265_70%_75%)]"
+              : "border-muted bg-black/60 text-muted-foreground",
+          )}
+        >
+          <div className="flex items-center gap-1.5">
+            <span
+              className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                aiEnabled ? "animate-pulse bg-[hsl(265_70%_70%)]" : "bg-muted",
+              )}
+            />
+            ai · {aiEnabled ? "live" : "off"} · {aiReqCount}t
+          </div>
+          {aiEnabled && aiDirectives.length > 0 && (
+            <div className="mt-0.5 text-left text-[9px] opacity-70">
+              {aiDirectives[0].action} · {aiDirectives[0].reason.slice(0, 22)}
+            </div>
+          )}
+          {aiError && (
+            <div className="mt-0.5 text-left text-[9px] text-destructive">
+              {aiError.slice(0, 28)}
+            </div>
+          )}
+        </button>
       </div>
 
       {/* Inspector overlay — bottom-left on mobile, bottom-right on desktop */}
