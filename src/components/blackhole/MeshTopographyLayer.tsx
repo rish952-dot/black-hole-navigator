@@ -44,6 +44,12 @@ interface Props {
   wireframe?: boolean;
   /** Visual layer position offset on Y (default -8 — below the tapestry). */
   yOffset?: number;
+  /**
+   * Minimum ms between JS-side uniform updates. 0 = every frame.
+   * Higher values reduce CPU work on low-end devices; the GPU keeps
+   * rendering at full framerate, only smoothing toward target slows.
+   */
+  updateInterval?: number;
 }
 
 /**
