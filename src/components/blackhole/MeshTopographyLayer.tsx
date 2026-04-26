@@ -280,6 +280,26 @@ export function MeshTopographyLayer({
     u.uStability.value += (field.stability - u.uStability.value) * 0.08;
     u.uFlowAngle.value += (field.flowAngle - u.uFlowAngle.value) * 0.08;
     u.uAnomalies.value += (field.anomalies - u.uAnomalies.value) * 0.12;
+
+    // Push node influences as packed vec3(x, z, weight) + parallel radius.
+    // Smoothed toward target so toggles don't pop.
+    const list = influences ?? [];
+    const n = Math.min(list.length, MAX_INFLUENCES);
+    const posArr = u.uInfluencePos.value as THREE.Vector3[];
+    const radArr = u.uInfluenceRadius.value as Float32Array;
+    for (let i = 0; i < MAX_INFLUENCES; i++) {
+      const target = i < n ? list[i] : null;
+      const tx = target ? target.x : 0;
+      const tz = target ? target.z : 0;
+      const tw = target ? target.weight : 0;
+      const tr = target ? target.radius ?? 3.0 : 3.0;
+      const v = posArr[i];
+      v.x += (tx - v.x) * 0.18;
+      v.y += (tz - v.y) * 0.18; // .y stores Z (we pack as vec3(x,z,w))
+      v.z += (tw - v.z) * 0.18;
+      radArr[i] += (tr - radArr[i]) * 0.18;
+    }
+    u.uInfluenceCount.value = n;
   });
 
   return (
