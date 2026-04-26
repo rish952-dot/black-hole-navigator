@@ -70,6 +70,9 @@ export function NeuralTapestry({
     timestamp: number;
   } | null>(null);
 
+  // Live node-influence list driving the topography layer (GPU uniform).
+  const [influences, setInfluences] = useState<NodeInfluence[]>([]);
+
   const handleSelect = useCallback(
     (idx: number, readout: NodeFieldReadout) => {
       const existing = stateMap.current.get(idx);
