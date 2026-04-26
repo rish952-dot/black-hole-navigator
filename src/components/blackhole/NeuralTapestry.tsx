@@ -12,7 +12,7 @@ import {
   type NodeFieldReadout,
   type LayerToggles,
 } from "./views/NodeInspectorPanel";
-import { MeshTopographyLayer, type TopoField } from "./MeshTopographyLayer";
+import { MeshTopographyLayer, type TopoField, type NodeInfluence } from "./MeshTopographyLayer";
 
 interface Props {
   className?: string;
