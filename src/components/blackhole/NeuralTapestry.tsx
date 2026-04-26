@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
+import {
+  EffectComposer,
+  Bloom,
+  Vignette,
+  ChromaticAberration,
+  ToneMapping,
+} from "@react-three/postprocessing";
+import { BlendFunction, ToneMappingMode } from "postprocessing";
 import * as THREE from "three";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -19,6 +27,10 @@ import {
   DEFAULT_TOPO_CONTROLS,
   type TopoControls,
 } from "./views/TopoControlPanel";
+import { useAINodes, type AIDirective } from "./useAINodes";
+
+/** Number of dedicated AI nodes — appended after the standard parameter nodes. */
+const AI_NODE_COUNT = 6;
 
 interface Props {
   className?: string;
@@ -46,7 +58,8 @@ export function NeuralTapestry({
   errorRate = 0.003,
 }: Props) {
   const isMobile = useIsMobile();
-  const count = nodeCount ?? (isMobile ? 3000 : 30000);
+  // +1000 nodes baseline lift for higher fidelity. Mobile cap respects perf.
+  const count = nodeCount ?? (isMobile ? 4000 : 31000);
   // Mobile boots in "med" tier; desktop in "high". Hook re-evaluates on FPS.
   const lod = useAdaptiveLOD({ initialTier: isMobile ? "med" : "high" });
   const [focusOn, setFocusOn] = useState<[number, number, number] | null>(null);
@@ -83,6 +96,22 @@ export function NeuralTapestry({
 
   // Manual topography overrides — sliders multiply into the derived field.
   const [topoCtl, setTopoCtl] = useState<TopoControls>(DEFAULT_TOPO_CONTROLS);
+
+  // AI control loop — 6 dedicated nodes ping the model every ~3s.
+  const [aiEnabled, setAiEnabled] = useState(true);
+  const [aiDirectives, setAiDirectives] = useState<AIDirective[]>([]);
+  const [aiError, setAiError] = useState<string | null>(null);
+  // Latest snapshot ref so the polling loop always sees fresh values.
+  const snapshotRef = useRef({
+    curvature: 0.5,
+    energyDensity: 0.5,
+    stability: 1,
+    flowAngle: 0,
+    anomalies: 0,
+    fps: 60,
+    brokenEdges: 0,
+    totalNodes: count,
+  });
 
   const handleSelect = useCallback(
     (idx: number, readout: NodeFieldReadout) => {
@@ -145,6 +174,59 @@ export function NeuralTapestry({
     };
   }, [selected, errorInfo, topoCtl]);
 
+  // Keep snapshot ref fresh — read by the AI poll loop without re-binding it.
+  useEffect(() => {
+    snapshotRef.current = {
+      curvature: topoField.curvature,
+      energyDensity: topoField.energyDensity,
+      stability: topoField.stability,
+      flowAngle: topoField.flowAngle,
+      anomalies: topoField.anomalies,
+      fps: lod.fps,
+      brokenEdges: errorInfo.broken,
+      totalNodes: count,
+    };
+  }, [topoField, lod.fps, errorInfo.broken, count]);
+
+  // Apply AI directives — each targets one of the 6 AI nodes (idx count..count+5).
+  const applyDirectives = useCallback(
+    (directives: AIDirective[]) => {
+      setAiDirectives(directives);
+      setAiError(null);
+      directives.forEach((d) => {
+        const idx = count + Math.max(0, Math.min(AI_NODE_COUNT - 1, d.nodeId));
+        const cur = stateMap.current.get(idx) ?? {
+          index: idx,
+          frozen: false,
+          isolated: false,
+          boost: 0,
+        };
+        const next: NodeState = { ...cur };
+        switch (d.action) {
+          case "boost":   next.boost = d.intensity; next.frozen = false; break;
+          case "freeze":  next.frozen = true; break;
+          case "isolate": next.isolated = true; break;
+          case "release": next.frozen = false; next.isolated = false; next.boost = 0; break;
+          case "anomaly": next.boost = Math.max(next.boost, 0.6); next.isolated = true; break;
+        }
+        stateMap.current.set(idx, next);
+      });
+      bumpVisuals();
+    },
+    [count, bumpVisuals],
+  );
+
+  const getSnapshot = useCallback(() => snapshotRef.current, []);
+  const { requestCount: aiReqCount, lastError: aiHookError } = useAINodes({
+    intervalMs: 3000,
+    disabled: !aiEnabled,
+    getSnapshot,
+    onDirectives: applyDirectives,
+  });
+  useEffect(() => {
+    if (aiHookError) setAiError(aiHookError);
+  }, [aiHookError]);
+
   return (
     <div
       className={cn(
@@ -153,7 +235,12 @@ export function NeuralTapestry({
       )}
     >
       <Canvas
-        gl={{ antialias: true, powerPreference: "high-performance" }}
+        gl={{
+          antialias: true,
+          powerPreference: "high-performance",
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: 1.15,
+        }}
         dpr={[1, isMobile ? 1.2 : 1.6]}
         camera={{ position: [0, 0, 50], fov: 50 }}
       >
@@ -171,6 +258,7 @@ export function NeuralTapestry({
         )}
         <TapestryMesh
           count={count}
+          aiNodeCount={AI_NODE_COUNT}
           errorRate={errorRate}
           onError={(info) => setErrorInfo(info)}
           onFocusRequest={(p) => setFocusOn(p)}
@@ -189,6 +277,26 @@ export function NeuralTapestry({
           maxDistance={200}
           touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
         />
+        {/* Cinematic post-processing — Unreal/Ubisoft-style stack.
+            Disabled on the lowest LOD tier to keep mobile responsive. */}
+        {!lod.reduced && (
+          <EffectComposer multisampling={isMobile ? 0 : 2}>
+            <Bloom
+              intensity={isMobile ? 0.5 : 0.9}
+              luminanceThreshold={0.35}
+              luminanceSmoothing={0.4}
+              mipmapBlur
+            />
+            <ChromaticAberration
+              offset={new THREE.Vector2(0.0008, 0.0012)}
+              radialModulation={false}
+              modulationOffset={0}
+              blendFunction={BlendFunction.NORMAL}
+            />
+            <Vignette eskil={false} offset={0.25} darkness={0.85} />
+            <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+          </EffectComposer>
+        )}
       </Canvas>
 
       <div className="pointer-events-none absolute left-3 top-3 space-y-1">
@@ -258,6 +366,36 @@ export function NeuralTapestry({
         >
           Reset view
         </Button>
+        {/* AI control loop status — clickable to toggle on/off. */}
+        <button
+          onClick={() => setAiEnabled((v) => !v)}
+          className={cn(
+            "pointer-events-auto rounded border px-2 py-1 font-mono text-[10px] tabular-nums backdrop-blur-md",
+            aiEnabled
+              ? "border-[hsl(265_70%_70%)] bg-[hsl(265_70%_70%/0.1)] text-[hsl(265_70%_75%)]"
+              : "border-muted bg-black/60 text-muted-foreground",
+          )}
+        >
+          <div className="flex items-center gap-1.5">
+            <span
+              className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                aiEnabled ? "animate-pulse bg-[hsl(265_70%_70%)]" : "bg-muted",
+              )}
+            />
+            ai · {aiEnabled ? "live" : "off"} · {aiReqCount}t
+          </div>
+          {aiEnabled && aiDirectives.length > 0 && (
+            <div className="mt-0.5 text-left text-[9px] opacity-70">
+              {aiDirectives[0].action} · {aiDirectives[0].reason.slice(0, 22)}
+            </div>
+          )}
+          {aiError && (
+            <div className="mt-0.5 text-left text-[9px] text-destructive">
+              {aiError.slice(0, 28)}
+            </div>
+          )}
+        </button>
       </div>
 
       {/* Inspector overlay — bottom-left on mobile, bottom-right on desktop */}
@@ -303,6 +441,7 @@ function CameraRig({ focusOn }: { focusOn: [number, number, number] | null }) {
 
 function TapestryMesh({
   count,
+  aiNodeCount,
   errorRate,
   onError,
   onFocusRequest,
@@ -314,6 +453,7 @@ function TapestryMesh({
   layers,
 }: {
   count: number;
+  aiNodeCount: number;
   errorRate: number;
   onError: (info: { total: number; broken: number; firstIdx: number | null }) => void;
   onFocusRequest: (p: [number, number, number]) => void;
@@ -624,7 +764,134 @@ function TapestryMesh({
         </lineSegments>
       )}
       {layers.debug && brokenCenter && <BrokenMarker position={brokenCenter} />}
+      <AINodeRing
+        baseIdx={count}
+        nodeCount={aiNodeCount}
+        stateMap={stateMap}
+        onSelect={(absIdx, pos) => {
+          const Rref = 24;
+          const r = Math.hypot(pos[0], pos[1], pos[2]);
+          onSelect(absIdx, {
+            pos,
+            rNorm: r / Rref,
+            potential: -Rref / Math.max(r, 0.5),
+            redshift: 1 - Math.sqrt(Math.max(0, 1 - 2 / Math.max(r, 2.1))),
+            tidal: 1 / Math.pow(Math.max(r, 1), 3),
+            edgeCount: 0,
+            brokenEdges: 0,
+          });
+        }}
+      />
     </>
+  );
+}
+
+/**
+ * AINodeRing — six dedicated AI control nodes arranged in an inner equatorial
+ * ring. Larger, emissive, and pulsing so they read as distinct from the 30k+
+ * parameter nodes. Their state lives in the same `stateMap` (indexed
+ * baseIdx..baseIdx+nodeCount-1) so directives applied by the AI loop affect
+ * their visual scale and color via the same boost/freeze/isolate pipeline.
+ */
+function AINodeRing({
+  baseIdx,
+  nodeCount,
+  stateMap,
+  onSelect,
+}: {
+  baseIdx: number;
+  nodeCount: number;
+  stateMap: Map<number, NodeState>;
+  onSelect: (absIdx: number, pos: [number, number, number]) => void;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+  const innerRadius = 14;
+
+  // Static positions on a tilted ring — never re-computed.
+  const positions = useMemo(() => {
+    return Array.from({ length: nodeCount }, (_, i) => {
+      const angle = (i / nodeCount) * Math.PI * 2;
+      const tilt = 0.35;
+      return [
+        innerRadius * Math.cos(angle),
+        innerRadius * Math.sin(angle) * tilt,
+        innerRadius * Math.sin(angle),
+      ] as [number, number, number];
+    });
+  }, [nodeCount]);
+
+  // Slow counter-rotation so the AI ring feels like a distinct subsystem.
+  useFrame((s) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y = -s.clock.elapsedTime * 0.12;
+    }
+  });
+
+  return (
+    <group ref={groupRef}>
+      {positions.map((p, i) => {
+        const absIdx = baseIdx + i;
+        const st = stateMap.get(absIdx);
+        const isFrozen = st?.frozen;
+        const isIsolated = st?.isolated;
+        const boost = st?.boost ?? 0;
+        const baseColor = isIsolated
+          ? "#5c6273"
+          : isFrozen
+          ? "#5cc8ff"
+          : boost > 0.3
+          ? "#ffaa44"
+          : "#a87bff"; // signature AI violet
+        const scale = 0.55 + Math.abs(boost) * 0.5;
+        return (
+          <group
+            key={absIdx}
+            position={p}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onSelect(absIdx, p);
+            }}
+          >
+            <mesh>
+              <icosahedronGeometry args={[scale, 1]} />
+              <meshBasicMaterial color={baseColor} toneMapped={false} />
+            </mesh>
+            <AIPulseRing color={baseColor} radius={scale * 1.8} phase={i * 0.7} />
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
+function AIPulseRing({
+  color,
+  radius,
+  phase,
+}: {
+  color: string;
+  radius: number;
+  phase: number;
+}) {
+  const ref = useRef<THREE.Mesh>(null);
+  useFrame((s) => {
+    if (!ref.current) return;
+    const k = 1 + Math.sin(s.clock.elapsedTime * 1.6 + phase) * 0.18;
+    ref.current.scale.setScalar(k);
+    const m = ref.current.material as THREE.MeshBasicMaterial;
+    m.opacity = 0.35 + 0.35 * (0.5 + 0.5 * Math.sin(s.clock.elapsedTime * 1.6 + phase));
+  });
+  return (
+    <mesh ref={ref} rotation={[Math.PI / 2, 0, 0]}>
+      <ringGeometry args={[radius * 0.95, radius, 32]} />
+      <meshBasicMaterial
+        color={color}
+        toneMapped={false}
+        transparent
+        opacity={0.5}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
   );
 }
 
