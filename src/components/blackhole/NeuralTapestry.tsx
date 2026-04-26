@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
+import {
+  EffectComposer,
+  Bloom,
+  Vignette,
+  ChromaticAberration,
+  ToneMapping,
+} from "@react-three/postprocessing";
+import { BlendFunction, ToneMappingMode } from "postprocessing";
 import * as THREE from "three";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -19,6 +27,10 @@ import {
   DEFAULT_TOPO_CONTROLS,
   type TopoControls,
 } from "./views/TopoControlPanel";
+import { useAINodes, type AIDirective } from "./useAINodes";
+
+/** Number of dedicated AI nodes — appended after the standard parameter nodes. */
+const AI_NODE_COUNT = 6;
 
 interface Props {
   className?: string;
