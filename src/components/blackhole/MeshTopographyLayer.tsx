@@ -78,6 +78,7 @@ export function MeshTopographyLayer({
   influences,
   wireframe = false,
   yOffset = -8,
+  updateInterval = 0,
 }: Props) {
   const meshRef = useRef<THREE.Mesh>(null);
   const matRef = useRef<THREE.ShaderMaterial>(null);
