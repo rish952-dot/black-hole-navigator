@@ -185,11 +185,28 @@ export function MeshTopographyLayer({
             }
           }
 
-          pos.y += well + wave + turb + flow + anomaly * 1.2;
+          // 6) NODE INFLUENCE — gaussian wells/peaks under selected/boosted
+          //    nodes. GPU-side, bounded loop, mobile safe.
+          float nodeDisp = 0.0;
+          float nodePulse = 0.0;
+          for (int i = 0; i < MAX_INFLUENCES; i++) {
+            if (i >= uInfluenceCount) break;
+            vec3 inf = uInfluencePos[i];           // (x, z, weight)
+            float rad = max(uInfluenceRadius[i], 0.5);
+            vec2 d = pos.xz - inf.xy;
+            float g = exp(-dot(d, d) / (rad * rad));
+            // Subtle breathing so active nodes feel alive.
+            float breathe = 0.85 + 0.15 * sin(uTime * 2.0 + float(i) * 1.7);
+            nodeDisp  += inf.z * g * 1.6 * breathe;
+            nodePulse += g * abs(inf.z);
+          }
+
+          pos.y += well + wave + turb + flow + anomaly * 1.2 + nodeDisp;
 
           vHeight = pos.y;
           vRadial = rNorm;
           vAnomaly = anomaly;
+          vNodePulse = nodePulse;
 
           gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
         }
