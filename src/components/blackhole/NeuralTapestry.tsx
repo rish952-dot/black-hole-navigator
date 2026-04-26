@@ -199,6 +199,16 @@ export function NeuralTapestry({
           edges {errorInfo.total.toLocaleString()} ·{" "}
           <span className="text-destructive">broken {errorInfo.broken}</span>
         </div>
+        <div
+          className={cn(
+            "rounded border bg-black/60 px-2 py-1 font-mono text-[10px] tabular-nums",
+            lod.tier === "high" && "border-secondary/40 text-secondary",
+            lod.tier === "med" && "border-accent/40 text-accent",
+            lod.tier === "low" && "border-destructive/40 text-destructive",
+          )}
+        >
+          lod {lod.tier} · {lod.fps}fps · res {lod.topoResolution}
+        </div>
         {layers.debug && (
           <div className="rounded border border-primary/40 bg-black/70 px-2 py-1 font-mono text-[10px] leading-tight text-primary">
             <div className="text-[9px] uppercase tracking-widest opacity-60">
