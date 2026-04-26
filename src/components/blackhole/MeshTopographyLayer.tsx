@@ -222,6 +222,7 @@ export function MeshTopographyLayer({
         varying float vRadial;
         varying float vFlow;
         varying float vAnomaly;
+        varying float vNodePulse;
         varying vec2  vUv;
 
         void main() {
