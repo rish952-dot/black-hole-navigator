@@ -97,7 +97,16 @@ export function MeshTopographyLayer({
         uFlowAngle: { value: field.flowAngle },
         uAnomalies: { value: field.anomalies },
         uSize: { value: size },
+        uInfluenceCount: { value: 0 },
+        // vec3 per slot: (x, z, weight). radius packed into a parallel array.
+        uInfluencePos: {
+          value: Array.from({ length: MAX_INFLUENCES }, () => new THREE.Vector3()),
+        },
+        uInfluenceRadius: {
+          value: new Float32Array(MAX_INFLUENCES),
+        },
       },
+      defines: { MAX_INFLUENCES: MAX_INFLUENCES },
       vertexShader: /* glsl */ `
         uniform float uTime;
         uniform float uCurvature;
@@ -106,6 +115,9 @@ export function MeshTopographyLayer({
         uniform float uFlowAngle;
         uniform float uAnomalies;
         uniform float uSize;
+        uniform int   uInfluenceCount;
+        uniform vec3  uInfluencePos[MAX_INFLUENCES];
+        uniform float uInfluenceRadius[MAX_INFLUENCES];
 
         varying float vHeight;
         varying float vRadial;
