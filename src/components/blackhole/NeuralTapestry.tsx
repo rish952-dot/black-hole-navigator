@@ -216,6 +216,11 @@ export function NeuralTapestry({
             )}
           </div>
         )}
+        <TopoControlPanel
+          value={topoCtl}
+          onChange={setTopoCtl}
+          className="w-56"
+        />
       </div>
 
       <div className="absolute right-3 top-3 flex flex-col items-end gap-2">
