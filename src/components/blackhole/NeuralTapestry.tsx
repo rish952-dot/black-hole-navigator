@@ -235,7 +235,12 @@ export function NeuralTapestry({
       )}
     >
       <Canvas
-        gl={{ antialias: true, powerPreference: "high-performance" }}
+        gl={{
+          antialias: true,
+          powerPreference: "high-performance",
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: 1.15,
+        }}
         dpr={[1, isMobile ? 1.2 : 1.6]}
         camera={{ position: [0, 0, 50], fov: 50 }}
       >
@@ -253,6 +258,7 @@ export function NeuralTapestry({
         )}
         <TapestryMesh
           count={count}
+          aiNodeCount={AI_NODE_COUNT}
           errorRate={errorRate}
           onError={(info) => setErrorInfo(info)}
           onFocusRequest={(p) => setFocusOn(p)}
@@ -271,6 +277,26 @@ export function NeuralTapestry({
           maxDistance={200}
           touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
         />
+        {/* Cinematic post-processing — Unreal/Ubisoft-style stack.
+            Disabled on the lowest LOD tier to keep mobile responsive. */}
+        {!lod.reduced && (
+          <EffectComposer multisampling={isMobile ? 0 : 2} disableNormalPass>
+            <Bloom
+              intensity={isMobile ? 0.5 : 0.9}
+              luminanceThreshold={0.35}
+              luminanceSmoothing={0.4}
+              mipmapBlur
+            />
+            <ChromaticAberration
+              offset={[0.0008, 0.0012]}
+              radialModulation={false}
+              modulationOffset={0}
+              blendFunction={BlendFunction.NORMAL}
+            />
+            <Vignette eskil={false} offset={0.25} darkness={0.85} />
+            <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+          </EffectComposer>
+        )}
       </Canvas>
 
       <div className="pointer-events-none absolute left-3 top-3 space-y-1">
