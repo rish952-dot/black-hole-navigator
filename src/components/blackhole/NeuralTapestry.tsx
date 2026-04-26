@@ -47,6 +47,8 @@ export function NeuralTapestry({
 }: Props) {
   const isMobile = useIsMobile();
   const count = nodeCount ?? (isMobile ? 3000 : 30000);
+  // Mobile boots in "med" tier; desktop in "high". Hook re-evaluates on FPS.
+  const lod = useAdaptiveLOD({ initialTier: isMobile ? "med" : "high" });
   const [focusOn, setFocusOn] = useState<[number, number, number] | null>(null);
   const [errorInfo, setErrorInfo] = useState<{
     total: number;
