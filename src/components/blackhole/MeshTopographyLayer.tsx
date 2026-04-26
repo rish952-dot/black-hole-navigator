@@ -278,9 +278,19 @@ export function MeshTopographyLayer({
 
   matRef.current = material;
 
-  useFrame((state, dt) => {
+  // Throttle accumulator — counts ms since last full smoothing pass.
+  const accRef = useRef(0);
+
+  useFrame((_state, dt) => {
     const u = material.uniforms;
+    // uTime always advances so shader animations stay smooth even when
+    // we throttle JS-side smoothing of field uniforms.
     u.uTime.value += dt;
+
+    accRef.current += dt * 1000;
+    if (updateInterval > 0 && accRef.current < updateInterval) return;
+    accRef.current = 0;
+
     // Smooth uniforms toward current field — avoids visual jumps when params change.
     u.uCurvature.value += (field.curvature - u.uCurvature.value) * 0.08;
     u.uEnergy.value += (field.energyDensity - u.uEnergy.value) * 0.08;
