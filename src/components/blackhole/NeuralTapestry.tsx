@@ -13,6 +13,11 @@ import {
   type LayerToggles,
 } from "./views/NodeInspectorPanel";
 import { MeshTopographyLayer, type TopoField, type NodeInfluence } from "./MeshTopographyLayer";
+import {
+  TopoControlPanel,
+  DEFAULT_TOPO_CONTROLS,
+  type TopoControls,
+} from "./views/TopoControlPanel";
 
 interface Props {
   className?: string;
