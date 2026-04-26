@@ -164,7 +164,8 @@ export function NeuralTapestry({
           <MeshTopographyLayer
             field={topoField}
             influences={influences}
-            resolution={isMobile ? 64 : 128}
+            resolution={lod.topoResolution}
+            updateInterval={lod.topoUpdateInterval}
             wireframe={layers.debug}
           />
         )}
