@@ -157,7 +157,7 @@ export function NeuralTapestry({
         <color attach="background" args={["#020410"]} />
         <ambientLight intensity={0.6} />
         {/* Topography surface — additive layer, sits behind the tapestry. */}
-        {layers.fourD && (
+        {layers.fourD && topoCtl.enabled && (
           <MeshTopographyLayer
             field={topoField}
             influences={influences}
