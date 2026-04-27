@@ -475,7 +475,8 @@ function CameraRig({ focusOn }: { focusOn: [number, number, number] | null }) {
 
 function TapestryMesh({
   count,
-  aiNodeCount,
+  coreAiCount,
+  governorAiCount,
   errorRate,
   onError,
   onFocusRequest,
@@ -487,7 +488,8 @@ function TapestryMesh({
   layers,
 }: {
   count: number;
-  aiNodeCount: number;
+  coreAiCount: number;
+  governorAiCount: number;
   errorRate: number;
   onError: (info: { total: number; broken: number; firstIdx: number | null }) => void;
   onFocusRequest: (p: [number, number, number]) => void;
