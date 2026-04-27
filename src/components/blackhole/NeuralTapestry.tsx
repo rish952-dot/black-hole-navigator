@@ -29,6 +29,14 @@ import {
 } from "./views/TopoControlPanel";
 import { useAINodes, type AIDirective, type AIDirectiveAction } from "./useAINodes";
 import { AIActivityPanel, emptyStat, type AINodeStat } from "./views/AIActivityPanel";
+import {
+  useAIStream,
+  useSelfHealing,
+  clampDirective,
+  DEFAULT_ACTION_CAPS,
+  type ActionCaps,
+} from "./useAIStream";
+import { AIActionCapsPanel } from "./views/AIActionCapsPanel";
 
 /** Dedicated AI nodes — 6 core actuators + 65 governors that help steer them. */
 const CORE_AI_NODE_COUNT = 6;
@@ -104,12 +112,22 @@ export function NeuralTapestry({
   const [aiEnabled, setAiEnabled] = useState(true);
   const [aiDirectives, setAiDirectives] = useState<AIDirective[]>([]);
   const [aiError, setAiError] = useState<string | null>(null);
+  // Per-action intensity caps — clamps directive magnitudes; 0 disables an action.
+  const [actionCaps, setActionCaps] = useState<ActionCaps>(DEFAULT_ACTION_CAPS);
   // Per-AI-node rolling activity record — drives the AIActivityPanel.
   const [aiStats, setAiStats] = useState<AINodeStat[]>(() =>
     Array.from({ length: AI_NODE_COUNT }, (_, i) =>
       emptyStat(i, i >= CORE_AI_NODE_COUNT),
     ),
   );
+  // Per-AI-node impulse pulses — { node absIdx → expiresAt(ms) + amplitude }.
+  // Read by the AINodeRing in useFrame to add a brief scale + jitter pop.
+  const impulseMap = useRef<Map<number, { expires: number; amp: number }>>(new Map());
+  // Camera shake — CameraRig reads { until, amp } and applies a tiny offset.
+  const cameraShakeRef = useRef<{ until: number; amp: number }>({ until: 0, amp: 0 });
+  // Caps ref so the streaming callback always sees the freshest caps without rebinding.
+  const capsRef = useRef(actionCaps);
+  capsRef.current = actionCaps;
   // Latest snapshot ref so the polling loop always sees fresh values.
   const snapshotRef = useRef({
     curvature: 0.5,
@@ -197,17 +215,25 @@ export function NeuralTapestry({
     };
   }, [topoField, lod.fps, errorInfo.broken, count]);
 
-  // Apply AI directives — each targets one of the 71 AI nodes
-  // (idx count..count+70). Also records per-node activity for the panel.
+  // Apply AI directives — clamps each via per-action caps, records activity,
+  // mutates state, and triggers per-node impulses + camera shake on big moves.
   const applyDirectives = useCallback(
     (directives: AIDirective[]) => {
-      setAiDirectives(directives);
+      // Clamp via current caps; drop any whose action is fully disabled.
+      const caps = capsRef.current;
+      const clamped: AIDirective[] = [];
+      for (const d of directives) {
+        const cd = clampDirective(d, caps);
+        if (cd) clamped.push(cd);
+      }
+      if (clamped.length === 0) return;
+
+      setAiDirectives(clamped);
       setAiError(null);
       const ts = Date.now();
-      // Mutate a single copy of the stats array per batch.
       setAiStats((prev) => {
         const nextStats = prev.slice();
-        directives.forEach((d) => {
+        clamped.forEach((d) => {
           const nodeId = Math.max(0, Math.min(AI_NODE_COUNT - 1, d.nodeId));
           const cur = nextStats[nodeId];
           const action: AIDirectiveAction = d.action;
@@ -225,8 +251,11 @@ export function NeuralTapestry({
         });
         return nextStats;
       });
-      directives.forEach((d) => {
-        const idx = count + Math.max(0, Math.min(AI_NODE_COUNT - 1, d.nodeId));
+
+      let maxImpulse = 0;
+      clamped.forEach((d) => {
+        const nodeId = Math.max(0, Math.min(AI_NODE_COUNT - 1, d.nodeId));
+        const idx = count + nodeId;
         const cur = stateMap.current.get(idx) ?? {
           index: idx,
           frozen: false,
@@ -242,7 +271,27 @@ export function NeuralTapestry({
           case "anomaly": next.boost = Math.max(next.boost, 0.6); next.isolated = true; break;
         }
         stateMap.current.set(idx, next);
+
+        // Impulse: any directive with |intensity| > 0.4 OR an anomaly action
+        // pops the node briefly. Anomalies always feed camera shake.
+        const amp = d.action === "anomaly"
+          ? 0.9
+          : Math.abs(d.intensity) > 0.4
+          ? Math.abs(d.intensity)
+          : 0;
+        if (amp > 0) {
+          impulseMap.current.set(idx, { expires: ts + 380, amp });
+          if (amp > maxImpulse) maxImpulse = amp;
+        }
       });
+
+      // Camera shake — proportional to biggest impulse this batch, capped
+      // so it stays cinematic, not nauseating.
+      if (maxImpulse > 0.45) {
+        const dur = maxImpulse > 0.85 ? 420 : 240;
+        cameraShakeRef.current = { until: ts + dur, amp: Math.min(0.35, maxImpulse * 0.35) };
+      }
+
       bumpVisuals();
     },
     [count, bumpVisuals],
@@ -258,6 +307,87 @@ export function NeuralTapestry({
   useEffect(() => {
     if (aiHookError) setAiError(aiHookError);
   }, [aiHookError]);
+
+  // STREAMING AI — long-lived SSE that drips one directive at a time.
+  // Funnels through the same applyDirectives pipe so caps + impulses + stats
+  // all apply identically.
+  const onStreamDirective = useCallback(
+    (d: AIDirective) => applyDirectives([d]),
+    [applyDirectives],
+  );
+  const {
+    status: streamStatus,
+    error: streamError,
+    streamCount,
+    directiveCount: streamDirCount,
+  } = useAIStream({
+    disabled: !aiEnabled,
+    getSnapshot,
+    onDirective: onStreamDirective,
+  });
+
+  // SELF-HEALING governor — runs locally at 2Hz. When stability collapses or
+  // too many edges break, it auto-releases all AI nodes, clears broken-edge
+  // markers, and pulses small randomized boosts to wake the field back up.
+  const healActions = useMemo(
+    () => ({
+      releaseAllAI: () => {
+        for (let i = 0; i < AI_NODE_COUNT; i++) {
+          const idx = count + i;
+          stateMap.current.set(idx, { index: idx, frozen: false, isolated: false, boost: 0 });
+        }
+        bumpVisuals();
+      },
+      repairBrokenEdges: () => {
+        // Mark visually as 0 broken — actual edge geometry remains, but the
+        // overlay/badge clear gives the user feedback that healing happened.
+        setErrorInfo((e) => ({ ...e, broken: 0, firstIdx: null }));
+      },
+      pulseRandomBoosts: (intensity: number) => {
+        const ts = Date.now();
+        for (let k = 0; k < 6; k++) {
+          const nodeId = Math.floor(Math.random() * AI_NODE_COUNT);
+          const idx = count + nodeId;
+          const sign = Math.random() < 0.5 ? -1 : 1;
+          const v = sign * intensity * (0.6 + Math.random() * 0.4);
+          stateMap.current.set(idx, {
+            index: idx,
+            frozen: false,
+            isolated: false,
+            boost: v,
+          });
+          impulseMap.current.set(idx, { expires: ts + 350, amp: Math.abs(v) });
+        }
+        bumpVisuals();
+      },
+    }),
+    [count, bumpVisuals],
+  );
+  const readHealing = useCallback(
+    () => {
+      let isolatedAI = 0;
+      for (let i = 0; i < AI_NODE_COUNT; i++) {
+        if (stateMap.current.get(count + i)?.isolated) isolatedAI++;
+      }
+      return {
+        brokenEdges: errorInfo.broken,
+        isolatedAINodes: isolatedAI,
+        stability: snapshotRef.current.stability,
+        lastHealMs: 0,
+        healCount: 0,
+      };
+    },
+    [count, errorInfo.broken],
+  );
+  const { healEvents } = useSelfHealing({
+    enabled: aiEnabled,
+    read: readHealing,
+    actions: healActions,
+  });
+
+  useEffect(() => {
+    if (streamError) setAiError(streamError);
+  }, [streamError]);
 
   return (
     <div
@@ -301,8 +431,9 @@ export function NeuralTapestry({
           stateMap={stateMap.current}
           selectedIdx={selected?.index ?? null}
           layers={layers}
+          impulseMap={impulseMap.current}
         />
-        <CameraRig focusOn={focusOn} />
+        <CameraRig focusOn={focusOn} shakeRef={cameraShakeRef} />
         <OrbitControls
           enableDamping
           dampingFactor={0.08}
@@ -377,6 +508,20 @@ export function NeuralTapestry({
           className="w-56"
         />
         <AIActivityPanel stats={aiStats} className="w-56" />
+        <AIActionCapsPanel value={actionCaps} onChange={setActionCaps} className="w-56" />
+        {healEvents.length > 0 && (
+          <div className="rounded border border-[hsl(140_60%_55%/0.4)] bg-black/70 px-2 py-1 font-mono text-[9px] text-[hsl(140_60%_75%)] backdrop-blur-md">
+            <div className="uppercase tracking-widest opacity-70">self-heal</div>
+            {healEvents.slice(0, 3).map((h) => (
+              <div key={h.ts} className="tabular-nums opacity-90">
+                · {h.reason}
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="rounded border border-[hsl(265_70%_70%/0.4)] bg-black/60 px-2 py-1 font-mono text-[9px] text-[hsl(265_70%_85%)] backdrop-blur-md">
+          stream {streamStatus} · {streamCount}s · {streamDirCount}d
+        </div>
       </div>
 
       <div className="absolute right-3 top-3 flex flex-col items-end gap-2">
@@ -459,16 +604,44 @@ export function NeuralTapestry({
   );
 }
 
-function CameraRig({ focusOn }: { focusOn: [number, number, number] | null }) {
+function CameraRig({
+  focusOn,
+  shakeRef,
+}: {
+  focusOn: [number, number, number] | null;
+  shakeRef?: React.MutableRefObject<{ until: number; amp: number }>;
+}) {
   const { camera } = useThree();
   const target = useRef(new THREE.Vector3());
+  const shakeOffset = useRef(new THREE.Vector3());
+  const basePos = useRef(new THREE.Vector3());
   useEffect(() => {
     if (focusOn) target.current.set(...focusOn);
   }, [focusOn]);
-  useFrame(() => {
-    if (focusOn) {
-      camera.lookAt(target.current);
+  useFrame((state) => {
+    if (focusOn) camera.lookAt(target.current);
+
+    // Camera shake — tiny per-frame jitter on top of OrbitControls' position.
+    // We sample noise-style offsets that decay smoothly to zero.
+    if (shakeRef) {
+      const now = performance.now();
+      const remain = shakeRef.current.until - now;
+      if (remain > 0 && shakeRef.current.amp > 0) {
+        const k = Math.min(1, remain / 220) * shakeRef.current.amp;
+        const t = state.clock.elapsedTime;
+        const ox = Math.sin(t * 73.0) * k;
+        const oy = Math.cos(t * 91.0) * k;
+        const oz = Math.sin(t * 51.0 + 1.7) * k * 0.5;
+        // Subtract previous shake, add new — keeps OrbitControls happy.
+        camera.position.sub(shakeOffset.current);
+        shakeOffset.current.set(ox, oy, oz);
+        camera.position.add(shakeOffset.current);
+      } else if (shakeOffset.current.lengthSq() > 0) {
+        camera.position.sub(shakeOffset.current);
+        shakeOffset.current.set(0, 0, 0);
+      }
     }
+    basePos.current.copy(camera.position);
   });
   return null;
 }
@@ -486,6 +659,7 @@ function TapestryMesh({
   stateMap,
   selectedIdx,
   layers,
+  impulseMap,
 }: {
   count: number;
   coreAiCount: number;
@@ -505,6 +679,7 @@ function TapestryMesh({
   stateMap: Map<number, NodeState>;
   selectedIdx: number | null;
   layers: LayerToggles;
+  impulseMap: Map<number, { expires: number; amp: number }>;
 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const linesRef = useRef<THREE.LineSegments>(null);
@@ -805,6 +980,7 @@ function TapestryMesh({
         coreCount={coreAiCount}
         governorCount={governorAiCount}
         stateMap={stateMap}
+        impulseMap={impulseMap}
         onSelect={(absIdx, pos) => {
           const Rref = 24;
           const r = Math.hypot(pos[0], pos[1], pos[2]);
@@ -840,15 +1016,19 @@ function AINodeRing({
   coreCount,
   governorCount,
   stateMap,
+  impulseMap,
   onSelect,
 }: {
   baseIdx: number;
   coreCount: number;
   governorCount: number;
   stateMap: Map<number, NodeState>;
+  impulseMap: Map<number, { expires: number; amp: number }>;
   onSelect: (absIdx: number, pos: [number, number, number]) => void;
 }) {
   const groupRef = useRef<THREE.Group>(null);
+  const coreRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const govRefs = useRef<(THREE.Mesh | null)[]>([]);
   const innerRadius = 14;
   const outerRadius = 20;
 
@@ -901,10 +1081,59 @@ function AINodeRing({
     return g;
   }, [governorCount, governorData, corePositions]);
 
-  // Slow counter-rotation so the AI subsystem feels distinct.
+  // Slow counter-rotation + impulse decay. Impulses pop a node's scale and
+  // jitter its position briefly when AI fires a high-intensity directive.
   useFrame((s) => {
     if (groupRef.current) {
       groupRef.current.rotation.y = -s.clock.elapsedTime * 0.12;
+    }
+    const now = performance.now();
+    const t = s.clock.elapsedTime;
+    // Core impulse animation
+    for (let i = 0; i < coreCount; i++) {
+      const ref = coreRefs.current[i];
+      if (!ref) continue;
+      const imp = impulseMap.get(baseIdx + i);
+      if (imp && imp.expires > now) {
+        const k = (imp.expires - now) / 380;
+        const pop = 1 + imp.amp * 0.7 * k;
+        ref.scale.setScalar(pop);
+        const j = imp.amp * 0.4 * k;
+        ref.position.set(
+          corePositions[i][0] + Math.sin(t * 40 + i) * j,
+          corePositions[i][1] + Math.cos(t * 47 + i) * j,
+          corePositions[i][2] + Math.sin(t * 33 + i) * j,
+        );
+      } else {
+        if (ref.scale.x !== 1) ref.scale.setScalar(1);
+        const p = corePositions[i];
+        if (ref.position.x !== p[0]) ref.position.set(p[0], p[1], p[2]);
+      }
+    }
+    // Governor impulse animation (smaller amp)
+    for (let i = 0; i < governorCount; i++) {
+      const ref = govRefs.current[i];
+      if (!ref) continue;
+      const imp = impulseMap.get(baseIdx + coreCount + i);
+      if (imp && imp.expires > now) {
+        const k = (imp.expires - now) / 380;
+        ref.scale.setScalar(1 + imp.amp * 1.2 * k);
+        const j = imp.amp * 0.25 * k;
+        const p = governorData.positions[i];
+        ref.position.set(
+          p[0] + Math.sin(t * 51 + i) * j,
+          p[1] + Math.cos(t * 47 + i) * j,
+          p[2] + Math.sin(t * 39 + i) * j,
+        );
+      } else {
+        if (ref.scale.x !== 1) ref.scale.setScalar(1);
+        const p = governorData.positions[i];
+        if (ref.position.x !== p[0]) ref.position.set(p[0], p[1], p[2]);
+      }
+    }
+    // GC expired entries opportunistically.
+    if (impulseMap.size > 0 && Math.random() < 0.02) {
+      for (const [k, v] of impulseMap) if (v.expires < now) impulseMap.delete(k);
     }
   });
 
@@ -939,7 +1168,7 @@ function AINodeRing({
               onSelect(absIdx, p);
             }}
           >
-            <mesh>
+            <mesh ref={(m) => { coreRefs.current[i] = m; }}>
               <icosahedronGeometry args={[scale, 1]} />
               <meshBasicMaterial color={baseColor} toneMapped={false} />
             </mesh>
@@ -965,6 +1194,7 @@ function AINodeRing({
         const scale = 0.18 + Math.abs(boost) * 0.25;
         return (
           <mesh
+            ref={(m) => { govRefs.current[i] = m; }}
             key={absIdx}
             position={p}
             onPointerDown={(e) => {
