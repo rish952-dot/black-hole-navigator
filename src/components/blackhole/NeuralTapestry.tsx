@@ -1180,6 +1180,7 @@ function AINodeRing({
         const scale = 0.18 + Math.abs(boost) * 0.25;
         return (
           <mesh
+            ref={(m) => { govRefs.current[i] = m; }}
             key={absIdx}
             position={p}
             onPointerDown={(e) => {
