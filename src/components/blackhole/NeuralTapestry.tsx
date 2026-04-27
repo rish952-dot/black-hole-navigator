@@ -1002,15 +1002,19 @@ function AINodeRing({
   coreCount,
   governorCount,
   stateMap,
+  impulseMap,
   onSelect,
 }: {
   baseIdx: number;
   coreCount: number;
   governorCount: number;
   stateMap: Map<number, NodeState>;
+  impulseMap: Map<number, { expires: number; amp: number }>;
   onSelect: (absIdx: number, pos: [number, number, number]) => void;
 }) {
   const groupRef = useRef<THREE.Group>(null);
+  const coreRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const govRefs = useRef<(THREE.Mesh | null)[]>([]);
   const innerRadius = 14;
   const outerRadius = 20;
 
