@@ -589,16 +589,44 @@ export function NeuralTapestry({
   );
 }
 
-function CameraRig({ focusOn }: { focusOn: [number, number, number] | null }) {
+function CameraRig({
+  focusOn,
+  shakeRef,
+}: {
+  focusOn: [number, number, number] | null;
+  shakeRef?: React.MutableRefObject<{ until: number; amp: number }>;
+}) {
   const { camera } = useThree();
   const target = useRef(new THREE.Vector3());
+  const shakeOffset = useRef(new THREE.Vector3());
+  const basePos = useRef(new THREE.Vector3());
   useEffect(() => {
     if (focusOn) target.current.set(...focusOn);
   }, [focusOn]);
-  useFrame(() => {
-    if (focusOn) {
-      camera.lookAt(target.current);
+  useFrame((state) => {
+    if (focusOn) camera.lookAt(target.current);
+
+    // Camera shake — tiny per-frame jitter on top of OrbitControls' position.
+    // We sample noise-style offsets that decay smoothly to zero.
+    if (shakeRef) {
+      const now = performance.now();
+      const remain = shakeRef.current.until - now;
+      if (remain > 0 && shakeRef.current.amp > 0) {
+        const k = Math.min(1, remain / 220) * shakeRef.current.amp;
+        const t = state.clock.elapsedTime;
+        const ox = Math.sin(t * 73.0) * k;
+        const oy = Math.cos(t * 91.0) * k;
+        const oz = Math.sin(t * 51.0 + 1.7) * k * 0.5;
+        // Subtract previous shake, add new — keeps OrbitControls happy.
+        camera.position.sub(shakeOffset.current);
+        shakeOffset.current.set(ox, oy, oz);
+        camera.position.add(shakeOffset.current);
+      } else if (shakeOffset.current.lengthSq() > 0) {
+        camera.position.sub(shakeOffset.current);
+        shakeOffset.current.set(0, 0, 0);
+      }
     }
+    basePos.current.copy(camera.position);
   });
   return null;
 }
