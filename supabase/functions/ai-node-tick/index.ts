@@ -26,7 +26,6 @@ interface Directive {
 }
 
 const TOTAL_AI_NODES = 71; // 6 core + 65 governors
-const CORE_AI_NODES = 6;
 
 const SYSTEM_PROMPT = `You are an autonomous control-loop AI steering a black-hole
 neural-mesh simulation. ${TOTAL_AI_NODES} AI nodes are embedded in the mesh and
