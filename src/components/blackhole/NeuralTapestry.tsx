@@ -215,17 +215,25 @@ export function NeuralTapestry({
     };
   }, [topoField, lod.fps, errorInfo.broken, count]);
 
-  // Apply AI directives — each targets one of the 71 AI nodes
-  // (idx count..count+70). Also records per-node activity for the panel.
+  // Apply AI directives — clamps each via per-action caps, records activity,
+  // mutates state, and triggers per-node impulses + camera shake on big moves.
   const applyDirectives = useCallback(
     (directives: AIDirective[]) => {
-      setAiDirectives(directives);
+      // Clamp via current caps; drop any whose action is fully disabled.
+      const caps = capsRef.current;
+      const clamped: AIDirective[] = [];
+      for (const d of directives) {
+        const cd = clampDirective(d, caps);
+        if (cd) clamped.push(cd);
+      }
+      if (clamped.length === 0) return;
+
+      setAiDirectives(clamped);
       setAiError(null);
       const ts = Date.now();
-      // Mutate a single copy of the stats array per batch.
       setAiStats((prev) => {
         const nextStats = prev.slice();
-        directives.forEach((d) => {
+        clamped.forEach((d) => {
           const nodeId = Math.max(0, Math.min(AI_NODE_COUNT - 1, d.nodeId));
           const cur = nextStats[nodeId];
           const action: AIDirectiveAction = d.action;
@@ -243,8 +251,11 @@ export function NeuralTapestry({
         });
         return nextStats;
       });
-      directives.forEach((d) => {
-        const idx = count + Math.max(0, Math.min(AI_NODE_COUNT - 1, d.nodeId));
+
+      let maxImpulse = 0;
+      clamped.forEach((d) => {
+        const nodeId = Math.max(0, Math.min(AI_NODE_COUNT - 1, d.nodeId));
+        const idx = count + nodeId;
         const cur = stateMap.current.get(idx) ?? {
           index: idx,
           frozen: false,
@@ -260,7 +271,27 @@ export function NeuralTapestry({
           case "anomaly": next.boost = Math.max(next.boost, 0.6); next.isolated = true; break;
         }
         stateMap.current.set(idx, next);
+
+        // Impulse: any directive with |intensity| > 0.4 OR an anomaly action
+        // pops the node briefly. Anomalies always feed camera shake.
+        const amp = d.action === "anomaly"
+          ? 0.9
+          : Math.abs(d.intensity) > 0.4
+          ? Math.abs(d.intensity)
+          : 0;
+        if (amp > 0) {
+          impulseMap.current.set(idx, { expires: ts + 380, amp });
+          if (amp > maxImpulse) maxImpulse = amp;
+        }
       });
+
+      // Camera shake — proportional to biggest impulse this batch, capped
+      // so it stays cinematic, not nauseating.
+      if (maxImpulse > 0.45) {
+        const dur = maxImpulse > 0.85 ? 420 : 240;
+        cameraShakeRef.current = { until: ts + dur, amp: Math.min(0.35, maxImpulse * 0.35) };
+      }
+
       bumpVisuals();
     },
     [count, bumpVisuals],
