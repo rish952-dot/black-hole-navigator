@@ -1117,8 +1117,8 @@ function AINodeRing({
         if (ref.position.x !== p[0]) ref.position.set(p[0], p[1], p[2]);
       }
     }
-    // GC expired entries every ~2s.
-    if (Math.floor(t * 0.5) !== Math.floor((t - s.delta) * 0.5)) {
+    // GC expired entries opportunistically.
+    if (impulseMap.size > 0 && Math.random() < 0.02) {
       for (const [k, v] of impulseMap) if (v.expires < now) impulseMap.delete(k);
     }
   });
