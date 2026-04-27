@@ -27,10 +27,13 @@ import {
   DEFAULT_TOPO_CONTROLS,
   type TopoControls,
 } from "./views/TopoControlPanel";
-import { useAINodes, type AIDirective } from "./useAINodes";
+import { useAINodes, type AIDirective, type AIDirectiveAction } from "./useAINodes";
+import { AIActivityPanel, emptyStat, type AINodeStat } from "./views/AIActivityPanel";
 
-/** Number of dedicated AI nodes — appended after the standard parameter nodes. */
-const AI_NODE_COUNT = 6;
+/** Dedicated AI nodes — 6 core actuators + 65 governors that help steer them. */
+const CORE_AI_NODE_COUNT = 6;
+const GOVERNOR_AI_NODE_COUNT = 65;
+const AI_NODE_COUNT = CORE_AI_NODE_COUNT + GOVERNOR_AI_NODE_COUNT; // 71
 
 interface Props {
   className?: string;
@@ -58,8 +61,8 @@ export function NeuralTapestry({
   errorRate = 0.003,
 }: Props) {
   const isMobile = useIsMobile();
-  // +1000 nodes baseline lift for higher fidelity. Mobile cap respects perf.
-  const count = nodeCount ?? (isMobile ? 4000 : 31000);
+  // +3000 nodes lift for finer physics resolution. Mobile cap respects perf.
+  const count = nodeCount ?? (isMobile ? 7000 : 34000);
   // Mobile boots in "med" tier; desktop in "high". Hook re-evaluates on FPS.
   const lod = useAdaptiveLOD({ initialTier: isMobile ? "med" : "high" });
   const [focusOn, setFocusOn] = useState<[number, number, number] | null>(null);
@@ -97,10 +100,16 @@ export function NeuralTapestry({
   // Manual topography overrides — sliders multiply into the derived field.
   const [topoCtl, setTopoCtl] = useState<TopoControls>(DEFAULT_TOPO_CONTROLS);
 
-  // AI control loop — 6 dedicated nodes ping the model every ~3s.
+  // AI control loop — 71 dedicated nodes (6 core + 65 governors) ping every ~3s.
   const [aiEnabled, setAiEnabled] = useState(true);
   const [aiDirectives, setAiDirectives] = useState<AIDirective[]>([]);
   const [aiError, setAiError] = useState<string | null>(null);
+  // Per-AI-node rolling activity record — drives the AIActivityPanel.
+  const [aiStats, setAiStats] = useState<AINodeStat[]>(() =>
+    Array.from({ length: AI_NODE_COUNT }, (_, i) =>
+      emptyStat(i, i >= CORE_AI_NODE_COUNT),
+    ),
+  );
   // Latest snapshot ref so the polling loop always sees fresh values.
   const snapshotRef = useRef({
     curvature: 0.5,
@@ -188,11 +197,34 @@ export function NeuralTapestry({
     };
   }, [topoField, lod.fps, errorInfo.broken, count]);
 
-  // Apply AI directives — each targets one of the 6 AI nodes (idx count..count+5).
+  // Apply AI directives — each targets one of the 71 AI nodes
+  // (idx count..count+70). Also records per-node activity for the panel.
   const applyDirectives = useCallback(
     (directives: AIDirective[]) => {
       setAiDirectives(directives);
       setAiError(null);
+      const ts = Date.now();
+      // Mutate a single copy of the stats array per batch.
+      setAiStats((prev) => {
+        const nextStats = prev.slice();
+        directives.forEach((d) => {
+          const nodeId = Math.max(0, Math.min(AI_NODE_COUNT - 1, d.nodeId));
+          const cur = nextStats[nodeId];
+          const action: AIDirectiveAction = d.action;
+          nextStats[nodeId] = {
+            ...cur,
+            total: cur.total + 1,
+            counts: { ...cur.counts, [action]: cur.counts[action] + 1 },
+            intensitySum: cur.intensitySum + d.intensity,
+            intensityAbsSum: cur.intensityAbsSum + Math.abs(d.intensity),
+            lastAction: action,
+            lastIntensity: d.intensity,
+            lastReason: d.reason,
+            lastTs: ts,
+          };
+        });
+        return nextStats;
+      });
       directives.forEach((d) => {
         const idx = count + Math.max(0, Math.min(AI_NODE_COUNT - 1, d.nodeId));
         const cur = stateMap.current.get(idx) ?? {
@@ -258,7 +290,8 @@ export function NeuralTapestry({
         )}
         <TapestryMesh
           count={count}
-          aiNodeCount={AI_NODE_COUNT}
+          coreAiCount={CORE_AI_NODE_COUNT}
+          governorAiCount={GOVERNOR_AI_NODE_COUNT}
           errorRate={errorRate}
           onError={(info) => setErrorInfo(info)}
           onFocusRequest={(p) => setFocusOn(p)}
@@ -343,6 +376,7 @@ export function NeuralTapestry({
           onChange={setTopoCtl}
           className="w-56"
         />
+        <AIActivityPanel stats={aiStats} className="w-56" />
       </div>
 
       <div className="absolute right-3 top-3 flex flex-col items-end gap-2">
@@ -441,7 +475,8 @@ function CameraRig({ focusOn }: { focusOn: [number, number, number] | null }) {
 
 function TapestryMesh({
   count,
-  aiNodeCount,
+  coreAiCount,
+  governorAiCount,
   errorRate,
   onError,
   onFocusRequest,
@@ -453,7 +488,8 @@ function TapestryMesh({
   layers,
 }: {
   count: number;
-  aiNodeCount: number;
+  coreAiCount: number;
+  governorAiCount: number;
   errorRate: number;
   onError: (info: { total: number; broken: number; firstIdx: number | null }) => void;
   onFocusRequest: (p: [number, number, number]) => void;
@@ -766,7 +802,8 @@ function TapestryMesh({
       {layers.debug && brokenCenter && <BrokenMarker position={brokenCenter} />}
       <AINodeRing
         baseIdx={count}
-        nodeCount={aiNodeCount}
+        coreCount={coreAiCount}
+        governorCount={governorAiCount}
         stateMap={stateMap}
         onSelect={(absIdx, pos) => {
           const Rref = 24;
@@ -787,40 +824,84 @@ function TapestryMesh({
 }
 
 /**
- * AINodeRing — six dedicated AI control nodes arranged in an inner equatorial
- * ring. Larger, emissive, and pulsing so they read as distinct from the 30k+
- * parameter nodes. Their state lives in the same `stateMap` (indexed
- * baseIdx..baseIdx+nodeCount-1) so directives applied by the AI loop affect
- * their visual scale and color via the same boost/freeze/isolate pipeline.
+ * AINodeRing — dedicated AI control nodes.
+ *   - First `coreCount` (6) live on a tilted INNER ring as large violet
+ *     icosahedra; they are the primary actuators.
+ *   - The remaining (65) GOVERNOR nodes live on an outer spherical halo,
+ *     rendered as smaller emissive points connected by faint lines back to
+ *     their assigned core node. Governors fine-tune what the core does.
+ *
+ * State for ALL of them lives in `stateMap` at indices
+ * baseIdx..baseIdx+coreCount+governorCount-1, so directives flow through
+ * the same boost/freeze/isolate pipeline.
  */
 function AINodeRing({
   baseIdx,
-  nodeCount,
+  coreCount,
+  governorCount,
   stateMap,
   onSelect,
 }: {
   baseIdx: number;
-  nodeCount: number;
+  coreCount: number;
+  governorCount: number;
   stateMap: Map<number, NodeState>;
   onSelect: (absIdx: number, pos: [number, number, number]) => void;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const innerRadius = 14;
+  const outerRadius = 20;
 
-  // Static positions on a tilted ring — never re-computed.
-  const positions = useMemo(() => {
-    return Array.from({ length: nodeCount }, (_, i) => {
-      const angle = (i / nodeCount) * Math.PI * 2;
+  // Static core positions — tilted equatorial ring.
+  const corePositions = useMemo<[number, number, number][]>(() => {
+    return Array.from({ length: coreCount }, (_, i) => {
+      const angle = (i / coreCount) * Math.PI * 2;
       const tilt = 0.35;
       return [
         innerRadius * Math.cos(angle),
         innerRadius * Math.sin(angle) * tilt,
         innerRadius * Math.sin(angle),
-      ] as [number, number, number];
+      ];
     });
-  }, [nodeCount]);
+  }, [coreCount]);
 
-  // Slow counter-rotation so the AI ring feels like a distinct subsystem.
+  // Static governor positions — Fibonacci sphere shell at outerRadius.
+  // Each governor is mapped to one core node (round-robin) so we can draw
+  // a connector line; this also defines the "helping" relationship.
+  const governorData = useMemo(() => {
+    const positions: [number, number, number][] = [];
+    const coreOf: number[] = [];
+    for (let i = 0; i < governorCount; i++) {
+      const phi = Math.acos(1 - (2 * (i + 0.5)) / governorCount);
+      const theta = Math.PI * (1 + Math.sqrt(5)) * i;
+      positions.push([
+        outerRadius * Math.sin(phi) * Math.cos(theta),
+        outerRadius * Math.sin(phi) * Math.sin(theta),
+        outerRadius * Math.cos(phi),
+      ]);
+      coreOf.push(i % coreCount);
+    }
+    return { positions, coreOf };
+  }, [governorCount, coreCount]);
+
+  // Pre-built connector geometry: 2 verts per governor, vertex-colored.
+  const connectorGeom = useMemo(() => {
+    const g = new THREE.BufferGeometry();
+    const pos = new Float32Array(governorCount * 6);
+    const col = new Float32Array(governorCount * 6);
+    for (let i = 0; i < governorCount; i++) {
+      const gp = governorData.positions[i];
+      const cp = corePositions[governorData.coreOf[i]];
+      pos.set([gp[0], gp[1], gp[2], cp[0], cp[1], cp[2]], i * 6);
+      // violet → cyan gradient: governor end soft, core end brighter.
+      col.set([0.55, 0.42, 0.85, 0.66, 0.48, 1.0], i * 6);
+    }
+    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    return g;
+  }, [governorCount, governorData, corePositions]);
+
+  // Slow counter-rotation so the AI subsystem feels distinct.
   useFrame((s) => {
     if (groupRef.current) {
       groupRef.current.rotation.y = -s.clock.elapsedTime * 0.12;
@@ -829,7 +910,13 @@ function AINodeRing({
 
   return (
     <group ref={groupRef}>
-      {positions.map((p, i) => {
+      {/* Connector lines — drawn first so nodes render on top. */}
+      <lineSegments geometry={connectorGeom}>
+        <lineBasicMaterial vertexColors transparent opacity={0.18} />
+      </lineSegments>
+
+      {/* Core 6 — large icosahedra with pulse rings. */}
+      {corePositions.map((p, i) => {
         const absIdx = baseIdx + i;
         const st = stateMap.get(absIdx);
         const isFrozen = st?.frozen;
@@ -841,7 +928,7 @@ function AINodeRing({
           ? "#5cc8ff"
           : boost > 0.3
           ? "#ffaa44"
-          : "#a87bff"; // signature AI violet
+          : "#a87bff";
         const scale = 0.55 + Math.abs(boost) * 0.5;
         return (
           <group
@@ -858,6 +945,36 @@ function AINodeRing({
             </mesh>
             <AIPulseRing color={baseColor} radius={scale * 1.8} phase={i * 0.7} />
           </group>
+        );
+      })}
+
+      {/* Governors — smaller octahedra on the outer halo. */}
+      {governorData.positions.map((p, i) => {
+        const absIdx = baseIdx + coreCount + i;
+        const st = stateMap.get(absIdx);
+        const isFrozen = st?.frozen;
+        const isIsolated = st?.isolated;
+        const boost = st?.boost ?? 0;
+        const baseColor = isIsolated
+          ? "#3a3f4a"
+          : isFrozen
+          ? "#7fd6ff"
+          : boost > 0.3
+          ? "#ffcc77"
+          : "#9d6cff";
+        const scale = 0.18 + Math.abs(boost) * 0.25;
+        return (
+          <mesh
+            key={absIdx}
+            position={p}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onSelect(absIdx, p);
+            }}
+          >
+            <octahedronGeometry args={[scale, 0]} />
+            <meshBasicMaterial color={baseColor} toneMapped={false} />
+          </mesh>
         );
       })}
     </group>

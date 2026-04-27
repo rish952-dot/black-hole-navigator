@@ -19,24 +19,33 @@ interface FieldSnapshot {
 }
 
 interface Directive {
-  nodeId: number;        // 0..5 — which AI node this targets
+  nodeId: number;        // 0..70 — which AI node this targets
   action: "boost" | "freeze" | "isolate" | "release" | "anomaly";
   intensity: number;     // -1..1 (sign matters for boost)
   reason: string;        // 1-line human-readable rationale
 }
 
+const TOTAL_AI_NODES = 71; // 6 core + 65 governors
+
 const SYSTEM_PROMPT = `You are an autonomous control-loop AI steering a black-hole
-neural-mesh simulation. Six AI nodes (id 0-5) are embedded in the mesh and
-ping you every ~3 seconds with the live field snapshot. Your job: return
-6 short directives, one per AI node, that keep the simulation visually
-interesting AND stable.
+neural-mesh simulation. ${TOTAL_AI_NODES} AI nodes are embedded in the mesh and
+ping you every ~3 seconds with the live field snapshot.
+
+NODE LAYOUT:
+- ids 0-5  → CORE nodes: primary actuators, big visual effect.
+- ids 6-70 → GOVERNOR nodes: fine-grained helpers wired to the core 6.
+  Their job is to STABILISE & MODULATE what the core nodes do.
+
+Your job: return ${TOTAL_AI_NODES} short directives, one per AI node, that
+keep the simulation visually interesting AND stable.
 
 Heuristics:
-- If stability < 0.3 → freeze or release some nodes to settle the field.
-- If anomalies > 2 → flag "anomaly" on a couple nodes (visualizes hotspots).
-- If energyDensity < 0.5 → boost positively (+0.4 to +0.8) on 2-3 nodes.
-- If FPS < 30 → reduce intensity, prefer "release" actions.
+- If stability < 0.3 → freeze or release on most governors; settle the field.
+- If anomalies > 2  → flag "anomaly" on 2-3 nodes (visualizes hotspots).
+- If energyDensity < 0.5 → boost positively (+0.4 to +0.8) on 8-12 nodes.
+- If FPS < 30 → reduce intensity, prefer "release" actions on governors.
 - Vary actions across nodes — do NOT return identical directives.
+- Most governors should run mild intensities (|x| < 0.4); core nodes can swing harder.
 - Keep "reason" under 60 chars.`;
 
 Deno.serve(async (req) => {
@@ -65,18 +74,18 @@ Deno.serve(async (req) => {
             type: "function",
             function: {
               name: "emit_directives",
-              description: "Emit one directive per AI node (6 total).",
+              description: `Emit one directive per AI node (${TOTAL_AI_NODES} total).`,
               parameters: {
                 type: "object",
                 properties: {
                   directives: {
                     type: "array",
-                    minItems: 6,
-                    maxItems: 6,
+                    minItems: TOTAL_AI_NODES,
+                    maxItems: TOTAL_AI_NODES,
                     items: {
                       type: "object",
                       properties: {
-                        nodeId: { type: "integer", minimum: 0, maximum: 5 },
+                        nodeId: { type: "integer", minimum: 0, maximum: TOTAL_AI_NODES - 1 },
                         action: {
                           type: "string",
                           enum: ["boost", "freeze", "isolate", "release", "anomaly"],
