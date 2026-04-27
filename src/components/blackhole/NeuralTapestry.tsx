@@ -1154,7 +1154,7 @@ function AINodeRing({
               onSelect(absIdx, p);
             }}
           >
-            <mesh>
+            <mesh ref={(m) => { coreRefs.current[i] = m; }}>
               <icosahedronGeometry args={[scale, 1]} />
               <meshBasicMaterial color={baseColor} toneMapped={false} />
             </mesh>
