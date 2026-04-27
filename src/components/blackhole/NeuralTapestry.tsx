@@ -290,7 +290,8 @@ export function NeuralTapestry({
         )}
         <TapestryMesh
           count={count}
-          aiNodeCount={AI_NODE_COUNT}
+          coreAiCount={CORE_AI_NODE_COUNT}
+          governorAiCount={GOVERNOR_AI_NODE_COUNT}
           errorRate={errorRate}
           onError={(info) => setErrorInfo(info)}
           onFocusRequest={(p) => setFocusOn(p)}
