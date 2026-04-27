@@ -197,11 +197,34 @@ export function NeuralTapestry({
     };
   }, [topoField, lod.fps, errorInfo.broken, count]);
 
-  // Apply AI directives — each targets one of the 6 AI nodes (idx count..count+5).
+  // Apply AI directives — each targets one of the 71 AI nodes
+  // (idx count..count+70). Also records per-node activity for the panel.
   const applyDirectives = useCallback(
     (directives: AIDirective[]) => {
       setAiDirectives(directives);
       setAiError(null);
+      const ts = Date.now();
+      // Mutate a single copy of the stats array per batch.
+      setAiStats((prev) => {
+        const nextStats = prev.slice();
+        directives.forEach((d) => {
+          const nodeId = Math.max(0, Math.min(AI_NODE_COUNT - 1, d.nodeId));
+          const cur = nextStats[nodeId];
+          const action: AIDirectiveAction = d.action;
+          nextStats[nodeId] = {
+            ...cur,
+            total: cur.total + 1,
+            counts: { ...cur.counts, [action]: cur.counts[action] + 1 },
+            intensitySum: cur.intensitySum + d.intensity,
+            intensityAbsSum: cur.intensityAbsSum + Math.abs(d.intensity),
+            lastAction: action,
+            lastIntensity: d.intensity,
+            lastReason: d.reason,
+            lastTs: ts,
+          };
+        });
+        return nextStats;
+      });
       directives.forEach((d) => {
         const idx = count + Math.max(0, Math.min(AI_NODE_COUNT - 1, d.nodeId));
         const cur = stateMap.current.get(idx) ?? {
