@@ -46,7 +46,22 @@ interface Options {
   onDirectives: (d: AIDirective[]) => void;
 }
 
-const FN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-node-tick`;
+/**
+ * Build the edge function base URL. Lovable Cloud sets VITE_SUPABASE_PROJECT_ID;
+ * older projects may have VITE_SUPABASE_URL. We prefer URL when present.
+ */
+function buildFnBase(): string | null {
+  const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, "");
+  if (url && url !== "undefined") return `${url}/functions/v1`;
+  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID as string | undefined;
+  if (projectId && projectId !== "undefined") {
+    return `https://${projectId}.supabase.co/functions/v1`;
+  }
+  return null;
+}
+
+const FN_BASE = buildFnBase();
+const FN_URL = FN_BASE ? `${FN_BASE}/ai-node-tick` : null;
 const PUB_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 export function useAINodes({ intervalMs = 3000, disabled, getSnapshot, onDirectives }: Options) {
