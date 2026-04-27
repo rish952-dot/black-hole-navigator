@@ -431,8 +431,9 @@ export function NeuralTapestry({
           stateMap={stateMap.current}
           selectedIdx={selected?.index ?? null}
           layers={layers}
+          impulseMap={impulseMap.current}
         />
-        <CameraRig focusOn={focusOn} />
+        <CameraRig focusOn={focusOn} shakeRef={cameraShakeRef} />
         <OrbitControls
           enableDamping
           dampingFactor={0.08}
