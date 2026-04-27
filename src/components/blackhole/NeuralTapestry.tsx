@@ -645,6 +645,7 @@ function TapestryMesh({
   stateMap,
   selectedIdx,
   layers,
+  impulseMap,
 }: {
   count: number;
   coreAiCount: number;
@@ -664,6 +665,7 @@ function TapestryMesh({
   stateMap: Map<number, NodeState>;
   selectedIdx: number | null;
   layers: LayerToggles;
+  impulseMap: Map<number, { expires: number; amp: number }>;
 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const linesRef = useRef<THREE.LineSegments>(null);
