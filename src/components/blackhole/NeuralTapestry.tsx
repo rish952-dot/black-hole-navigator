@@ -100,10 +100,16 @@ export function NeuralTapestry({
   // Manual topography overrides — sliders multiply into the derived field.
   const [topoCtl, setTopoCtl] = useState<TopoControls>(DEFAULT_TOPO_CONTROLS);
 
-  // AI control loop — 6 dedicated nodes ping the model every ~3s.
+  // AI control loop — 71 dedicated nodes (6 core + 65 governors) ping every ~3s.
   const [aiEnabled, setAiEnabled] = useState(true);
   const [aiDirectives, setAiDirectives] = useState<AIDirective[]>([]);
   const [aiError, setAiError] = useState<string | null>(null);
+  // Per-AI-node rolling activity record — drives the AIActivityPanel.
+  const [aiStats, setAiStats] = useState<AINodeStat[]>(() =>
+    Array.from({ length: AI_NODE_COUNT }, (_, i) =>
+      emptyStat(i, i >= CORE_AI_NODE_COUNT),
+    ),
+  );
   // Latest snapshot ref so the polling loop always sees fresh values.
   const snapshotRef = useRef({
     curvature: 0.5,
