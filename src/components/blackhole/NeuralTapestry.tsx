@@ -966,6 +966,7 @@ function TapestryMesh({
         coreCount={coreAiCount}
         governorCount={governorAiCount}
         stateMap={stateMap}
+        impulseMap={impulseMap}
         onSelect={(absIdx, pos) => {
           const Rref = 24;
           const r = Math.hypot(pos[0], pos[1], pos[2]);
