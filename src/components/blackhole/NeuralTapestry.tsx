@@ -112,12 +112,22 @@ export function NeuralTapestry({
   const [aiEnabled, setAiEnabled] = useState(true);
   const [aiDirectives, setAiDirectives] = useState<AIDirective[]>([]);
   const [aiError, setAiError] = useState<string | null>(null);
+  // Per-action intensity caps — clamps directive magnitudes; 0 disables an action.
+  const [actionCaps, setActionCaps] = useState<ActionCaps>(DEFAULT_ACTION_CAPS);
   // Per-AI-node rolling activity record — drives the AIActivityPanel.
   const [aiStats, setAiStats] = useState<AINodeStat[]>(() =>
     Array.from({ length: AI_NODE_COUNT }, (_, i) =>
       emptyStat(i, i >= CORE_AI_NODE_COUNT),
     ),
   );
+  // Per-AI-node impulse pulses — { node absIdx → expiresAt(ms) + amplitude }.
+  // Read by the AINodeRing in useFrame to add a brief scale + jitter pop.
+  const impulseMap = useRef<Map<number, { expires: number; amp: number }>>(new Map());
+  // Camera shake — CameraRig reads { until, amp } and applies a tiny offset.
+  const cameraShakeRef = useRef<{ until: number; amp: number }>({ until: 0, amp: 0 });
+  // Caps ref so the streaming callback always sees the freshest caps without rebinding.
+  const capsRef = useRef(actionCaps);
+  capsRef.current = actionCaps;
   // Latest snapshot ref so the polling loop always sees fresh values.
   const snapshotRef = useRef({
     curvature: 0.5,
