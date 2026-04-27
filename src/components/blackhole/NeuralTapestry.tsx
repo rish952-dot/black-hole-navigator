@@ -820,40 +820,84 @@ function TapestryMesh({
 }
 
 /**
- * AINodeRing — six dedicated AI control nodes arranged in an inner equatorial
- * ring. Larger, emissive, and pulsing so they read as distinct from the 30k+
- * parameter nodes. Their state lives in the same `stateMap` (indexed
- * baseIdx..baseIdx+nodeCount-1) so directives applied by the AI loop affect
- * their visual scale and color via the same boost/freeze/isolate pipeline.
+ * AINodeRing — dedicated AI control nodes.
+ *   - First `coreCount` (6) live on a tilted INNER ring as large violet
+ *     icosahedra; they are the primary actuators.
+ *   - The remaining (65) GOVERNOR nodes live on an outer spherical halo,
+ *     rendered as smaller emissive points connected by faint lines back to
+ *     their assigned core node. Governors fine-tune what the core does.
+ *
+ * State for ALL of them lives in `stateMap` at indices
+ * baseIdx..baseIdx+coreCount+governorCount-1, so directives flow through
+ * the same boost/freeze/isolate pipeline.
  */
 function AINodeRing({
   baseIdx,
-  nodeCount,
+  coreCount,
+  governorCount,
   stateMap,
   onSelect,
 }: {
   baseIdx: number;
-  nodeCount: number;
+  coreCount: number;
+  governorCount: number;
   stateMap: Map<number, NodeState>;
   onSelect: (absIdx: number, pos: [number, number, number]) => void;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const innerRadius = 14;
+  const outerRadius = 20;
 
-  // Static positions on a tilted ring — never re-computed.
-  const positions = useMemo(() => {
-    return Array.from({ length: nodeCount }, (_, i) => {
-      const angle = (i / nodeCount) * Math.PI * 2;
+  // Static core positions — tilted equatorial ring.
+  const corePositions = useMemo<[number, number, number][]>(() => {
+    return Array.from({ length: coreCount }, (_, i) => {
+      const angle = (i / coreCount) * Math.PI * 2;
       const tilt = 0.35;
       return [
         innerRadius * Math.cos(angle),
         innerRadius * Math.sin(angle) * tilt,
         innerRadius * Math.sin(angle),
-      ] as [number, number, number];
+      ];
     });
-  }, [nodeCount]);
+  }, [coreCount]);
 
-  // Slow counter-rotation so the AI ring feels like a distinct subsystem.
+  // Static governor positions — Fibonacci sphere shell at outerRadius.
+  // Each governor is mapped to one core node (round-robin) so we can draw
+  // a connector line; this also defines the "helping" relationship.
+  const governorData = useMemo(() => {
+    const positions: [number, number, number][] = [];
+    const coreOf: number[] = [];
+    for (let i = 0; i < governorCount; i++) {
+      const phi = Math.acos(1 - (2 * (i + 0.5)) / governorCount);
+      const theta = Math.PI * (1 + Math.sqrt(5)) * i;
+      positions.push([
+        outerRadius * Math.sin(phi) * Math.cos(theta),
+        outerRadius * Math.sin(phi) * Math.sin(theta),
+        outerRadius * Math.cos(phi),
+      ]);
+      coreOf.push(i % coreCount);
+    }
+    return { positions, coreOf };
+  }, [governorCount, coreCount]);
+
+  // Pre-built connector geometry: 2 verts per governor, vertex-colored.
+  const connectorGeom = useMemo(() => {
+    const g = new THREE.BufferGeometry();
+    const pos = new Float32Array(governorCount * 6);
+    const col = new Float32Array(governorCount * 6);
+    for (let i = 0; i < governorCount; i++) {
+      const gp = governorData.positions[i];
+      const cp = corePositions[governorData.coreOf[i]];
+      pos.set([gp[0], gp[1], gp[2], cp[0], cp[1], cp[2]], i * 6);
+      // violet → cyan gradient: governor end soft, core end brighter.
+      col.set([0.55, 0.42, 0.85, 0.66, 0.48, 1.0], i * 6);
+    }
+    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    return g;
+  }, [governorCount, governorData, corePositions]);
+
+  // Slow counter-rotation so the AI subsystem feels distinct.
   useFrame((s) => {
     if (groupRef.current) {
       groupRef.current.rotation.y = -s.clock.elapsedTime * 0.12;
@@ -862,7 +906,13 @@ function AINodeRing({
 
   return (
     <group ref={groupRef}>
-      {positions.map((p, i) => {
+      {/* Connector lines — drawn first so nodes render on top. */}
+      <lineSegments geometry={connectorGeom}>
+        <lineBasicMaterial vertexColors transparent opacity={0.18} />
+      </lineSegments>
+
+      {/* Core 6 — large icosahedra with pulse rings. */}
+      {corePositions.map((p, i) => {
         const absIdx = baseIdx + i;
         const st = stateMap.get(absIdx);
         const isFrozen = st?.frozen;
@@ -874,7 +924,7 @@ function AINodeRing({
           ? "#5cc8ff"
           : boost > 0.3
           ? "#ffaa44"
-          : "#a87bff"; // signature AI violet
+          : "#a87bff";
         const scale = 0.55 + Math.abs(boost) * 0.5;
         return (
           <group
@@ -891,6 +941,36 @@ function AINodeRing({
             </mesh>
             <AIPulseRing color={baseColor} radius={scale * 1.8} phase={i * 0.7} />
           </group>
+        );
+      })}
+
+      {/* Governors — smaller octahedra on the outer halo. */}
+      {governorData.positions.map((p, i) => {
+        const absIdx = baseIdx + coreCount + i;
+        const st = stateMap.get(absIdx);
+        const isFrozen = st?.frozen;
+        const isIsolated = st?.isolated;
+        const boost = st?.boost ?? 0;
+        const baseColor = isIsolated
+          ? "#3a3f4a"
+          : isFrozen
+          ? "#7fd6ff"
+          : boost > 0.3
+          ? "#ffcc77"
+          : "#9d6cff";
+        const scale = 0.18 + Math.abs(boost) * 0.25;
+        return (
+          <mesh
+            key={absIdx}
+            position={p}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onSelect(absIdx, p);
+            }}
+          >
+            <octahedronGeometry args={[scale, 0]} />
+            <meshBasicMaterial color={baseColor} toneMapped={false} />
+          </mesh>
         );
       })}
     </group>
