@@ -29,6 +29,14 @@ import {
 } from "./views/TopoControlPanel";
 import { useAINodes, type AIDirective, type AIDirectiveAction } from "./useAINodes";
 import { AIActivityPanel, emptyStat, type AINodeStat } from "./views/AIActivityPanel";
+import {
+  useAIStream,
+  useSelfHealing,
+  clampDirective,
+  DEFAULT_ACTION_CAPS,
+  type ActionCaps,
+} from "./useAIStream";
+import { AIActionCapsPanel } from "./views/AIActionCapsPanel";
 
 /** Dedicated AI nodes — 6 core actuators + 65 governors that help steer them. */
 const CORE_AI_NODE_COUNT = 6;
