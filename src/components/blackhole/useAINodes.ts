@@ -78,6 +78,10 @@ export function useAINodes({ intervalMs = 3000, disabled, getSnapshot, onDirecti
     let cancelled = false;
 
     const fire = async () => {
+      if (!FN_URL) {
+        if (!cancelled) setLastError("AI gateway not configured (Cloud disabled)");
+        return;
+      }
       if (inFlightRef.current) return;
       if (Date.now() < backoffUntilRef.current) return;
       inFlightRef.current = true;
