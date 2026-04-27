@@ -75,18 +75,18 @@ Deno.serve(async (req) => {
             type: "function",
             function: {
               name: "emit_directives",
-              description: "Emit one directive per AI node (6 total).",
+              description: `Emit one directive per AI node (${TOTAL_AI_NODES} total).`,
               parameters: {
                 type: "object",
                 properties: {
                   directives: {
                     type: "array",
-                    minItems: 6,
-                    maxItems: 6,
+                    minItems: TOTAL_AI_NODES,
+                    maxItems: TOTAL_AI_NODES,
                     items: {
                       type: "object",
                       properties: {
-                        nodeId: { type: "integer", minimum: 0, maximum: 5 },
+                        nodeId: { type: "integer", minimum: 0, maximum: TOTAL_AI_NODES - 1 },
                         action: {
                           type: "string",
                           enum: ["boost", "freeze", "isolate", "release", "anomaly"],
