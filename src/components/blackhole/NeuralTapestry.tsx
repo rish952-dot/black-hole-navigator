@@ -1067,10 +1067,59 @@ function AINodeRing({
     return g;
   }, [governorCount, governorData, corePositions]);
 
-  // Slow counter-rotation so the AI subsystem feels distinct.
+  // Slow counter-rotation + impulse decay. Impulses pop a node's scale and
+  // jitter its position briefly when AI fires a high-intensity directive.
   useFrame((s) => {
     if (groupRef.current) {
       groupRef.current.rotation.y = -s.clock.elapsedTime * 0.12;
+    }
+    const now = performance.now();
+    const t = s.clock.elapsedTime;
+    // Core impulse animation
+    for (let i = 0; i < coreCount; i++) {
+      const ref = coreRefs.current[i];
+      if (!ref) continue;
+      const imp = impulseMap.get(baseIdx + i);
+      if (imp && imp.expires > now) {
+        const k = (imp.expires - now) / 380;
+        const pop = 1 + imp.amp * 0.7 * k;
+        ref.scale.setScalar(pop);
+        const j = imp.amp * 0.4 * k;
+        ref.position.set(
+          corePositions[i][0] + Math.sin(t * 40 + i) * j,
+          corePositions[i][1] + Math.cos(t * 47 + i) * j,
+          corePositions[i][2] + Math.sin(t * 33 + i) * j,
+        );
+      } else {
+        if (ref.scale.x !== 1) ref.scale.setScalar(1);
+        const p = corePositions[i];
+        if (ref.position.x !== p[0]) ref.position.set(p[0], p[1], p[2]);
+      }
+    }
+    // Governor impulse animation (smaller amp)
+    for (let i = 0; i < governorCount; i++) {
+      const ref = govRefs.current[i];
+      if (!ref) continue;
+      const imp = impulseMap.get(baseIdx + coreCount + i);
+      if (imp && imp.expires > now) {
+        const k = (imp.expires - now) / 380;
+        ref.scale.setScalar(1 + imp.amp * 1.2 * k);
+        const j = imp.amp * 0.25 * k;
+        const p = governorData.positions[i];
+        ref.position.set(
+          p[0] + Math.sin(t * 51 + i) * j,
+          p[1] + Math.cos(t * 47 + i) * j,
+          p[2] + Math.sin(t * 39 + i) * j,
+        );
+      } else {
+        if (ref.scale.x !== 1) ref.scale.setScalar(1);
+        const p = governorData.positions[i];
+        if (ref.position.x !== p[0]) ref.position.set(p[0], p[1], p[2]);
+      }
+    }
+    // GC expired entries every ~2s.
+    if (Math.floor(t * 0.5) !== Math.floor((t - s.delta) * 0.5)) {
+      for (const [k, v] of impulseMap) if (v.expires < now) impulseMap.delete(k);
     }
   });
 
