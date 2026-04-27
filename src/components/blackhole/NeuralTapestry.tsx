@@ -308,6 +308,87 @@ export function NeuralTapestry({
     if (aiHookError) setAiError(aiHookError);
   }, [aiHookError]);
 
+  // STREAMING AI — long-lived SSE that drips one directive at a time.
+  // Funnels through the same applyDirectives pipe so caps + impulses + stats
+  // all apply identically.
+  const onStreamDirective = useCallback(
+    (d: AIDirective) => applyDirectives([d]),
+    [applyDirectives],
+  );
+  const {
+    status: streamStatus,
+    error: streamError,
+    streamCount,
+    directiveCount: streamDirCount,
+  } = useAIStream({
+    disabled: !aiEnabled,
+    getSnapshot,
+    onDirective: onStreamDirective,
+  });
+
+  // SELF-HEALING governor — runs locally at 2Hz. When stability collapses or
+  // too many edges break, it auto-releases all AI nodes, clears broken-edge
+  // markers, and pulses small randomized boosts to wake the field back up.
+  const healActions = useMemo(
+    () => ({
+      releaseAllAI: () => {
+        for (let i = 0; i < AI_NODE_COUNT; i++) {
+          const idx = count + i;
+          stateMap.current.set(idx, { index: idx, frozen: false, isolated: false, boost: 0 });
+        }
+        bumpVisuals();
+      },
+      repairBrokenEdges: () => {
+        // Mark visually as 0 broken — actual edge geometry remains, but the
+        // overlay/badge clear gives the user feedback that healing happened.
+        setErrorInfo((e) => ({ ...e, broken: 0, firstIdx: null }));
+      },
+      pulseRandomBoosts: (intensity: number) => {
+        const ts = Date.now();
+        for (let k = 0; k < 6; k++) {
+          const nodeId = Math.floor(Math.random() * AI_NODE_COUNT);
+          const idx = count + nodeId;
+          const sign = Math.random() < 0.5 ? -1 : 1;
+          const v = sign * intensity * (0.6 + Math.random() * 0.4);
+          stateMap.current.set(idx, {
+            index: idx,
+            frozen: false,
+            isolated: false,
+            boost: v,
+          });
+          impulseMap.current.set(idx, { expires: ts + 350, amp: Math.abs(v) });
+        }
+        bumpVisuals();
+      },
+    }),
+    [count, bumpVisuals],
+  );
+  const readHealing = useCallback(
+    () => {
+      let isolatedAI = 0;
+      for (let i = 0; i < AI_NODE_COUNT; i++) {
+        if (stateMap.current.get(count + i)?.isolated) isolatedAI++;
+      }
+      return {
+        brokenEdges: errorInfo.broken,
+        isolatedAINodes: isolatedAI,
+        stability: snapshotRef.current.stability,
+        lastHealMs: 0,
+        healCount: 0,
+      };
+    },
+    [count, errorInfo.broken],
+  );
+  const { healEvents } = useSelfHealing({
+    enabled: aiEnabled,
+    read: readHealing,
+    actions: healActions,
+  });
+
+  useEffect(() => {
+    if (streamError) setAiError(streamError);
+  }, [streamError]);
+
   return (
     <div
       className={cn(
