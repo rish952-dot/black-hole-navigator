@@ -27,10 +27,13 @@ import {
   DEFAULT_TOPO_CONTROLS,
   type TopoControls,
 } from "./views/TopoControlPanel";
-import { useAINodes, type AIDirective } from "./useAINodes";
+import { useAINodes, type AIDirective, type AIDirectiveAction } from "./useAINodes";
+import { AIActivityPanel, emptyStat, type AINodeStat } from "./views/AIActivityPanel";
 
-/** Number of dedicated AI nodes — appended after the standard parameter nodes. */
-const AI_NODE_COUNT = 6;
+/** Dedicated AI nodes — 6 core actuators + 65 governors that help steer them. */
+const CORE_AI_NODE_COUNT = 6;
+const GOVERNOR_AI_NODE_COUNT = 65;
+const AI_NODE_COUNT = CORE_AI_NODE_COUNT + GOVERNOR_AI_NODE_COUNT; // 71
 
 interface Props {
   className?: string;
