@@ -802,7 +802,8 @@ function TapestryMesh({
       {layers.debug && brokenCenter && <BrokenMarker position={brokenCenter} />}
       <AINodeRing
         baseIdx={count}
-        nodeCount={aiNodeCount}
+        coreCount={coreAiCount}
+        governorCount={governorAiCount}
         stateMap={stateMap}
         onSelect={(absIdx, pos) => {
           const Rref = 24;
