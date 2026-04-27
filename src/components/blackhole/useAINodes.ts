@@ -60,9 +60,10 @@ function buildFnBase(): string | null {
   return null;
 }
 
-const FN_BASE = buildFnBase();
-const FN_URL = FN_BASE ? `${FN_BASE}/ai-node-tick` : null;
-const PUB_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+export const AI_FN_BASE = buildFnBase();
+export const AI_PUB_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+const FN_URL = AI_FN_BASE ? `${AI_FN_BASE}/ai-node-tick` : null;
+const PUB_KEY = AI_PUB_KEY;
 
 export function useAINodes({ intervalMs = 3000, disabled, getSnapshot, onDirectives }: Options) {
   const [lastDirectives, setLastDirectives] = useState<AIDirective[]>([]);
