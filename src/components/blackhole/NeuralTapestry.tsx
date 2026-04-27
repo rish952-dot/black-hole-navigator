@@ -375,6 +375,7 @@ export function NeuralTapestry({
           onChange={setTopoCtl}
           className="w-56"
         />
+        <AIActivityPanel stats={aiStats} className="w-56" />
       </div>
 
       <div className="absolute right-3 top-3 flex flex-col items-end gap-2">
