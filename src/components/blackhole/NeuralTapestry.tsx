@@ -508,6 +508,20 @@ export function NeuralTapestry({
           className="w-56"
         />
         <AIActivityPanel stats={aiStats} className="w-56" />
+        <AIActionCapsPanel value={actionCaps} onChange={setActionCaps} className="w-56" />
+        {healEvents.length > 0 && (
+          <div className="rounded border border-[hsl(140_60%_55%/0.4)] bg-black/70 px-2 py-1 font-mono text-[9px] text-[hsl(140_60%_75%)] backdrop-blur-md">
+            <div className="uppercase tracking-widest opacity-70">self-heal</div>
+            {healEvents.slice(0, 3).map((h) => (
+              <div key={h.ts} className="tabular-nums opacity-90">
+                · {h.reason}
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="rounded border border-[hsl(265_70%_70%/0.4)] bg-black/60 px-2 py-1 font-mono text-[9px] text-[hsl(265_70%_85%)] backdrop-blur-md">
+          stream {streamStatus} · {streamCount}s · {streamDirCount}d
+        </div>
       </div>
 
       <div className="absolute right-3 top-3 flex flex-col items-end gap-2">
