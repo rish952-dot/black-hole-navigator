@@ -117,7 +117,14 @@ export function NeuralTapestry({
   const [aiError, setAiError] = useState<string | null>(null);
   // Per-action intensity caps — clamps directive magnitudes; 0 disables an action.
   const [actionCaps, setActionCaps] = useState<ActionCaps>(DEFAULT_ACTION_CAPS);
-  // Per-AI-node rolling activity record — drives the AIActivityPanel.
+  // OVERCLOCK — full-send mode: removes caps, denser stream, max impulses.
+  const [overclock, setOverclock] = useState(false);
+  // AI debug provider + rolling event log (last 100).
+  const [debugProvider, setDebugProvider] = useState<StreamProvider>("default");
+  const [debugEvents, setDebugEvents] = useState<DebugEvent[]>([]);
+  const handleDebugEvent = useCallback((e: DebugEvent) => {
+    setDebugEvents((prev) => [e, ...prev].slice(0, 100));
+  }, []);
   const [aiStats, setAiStats] = useState<AINodeStat[]>(() =>
     Array.from({ length: AI_NODE_COUNT }, (_, i) =>
       emptyStat(i, i >= CORE_AI_NODE_COUNT),
