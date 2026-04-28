@@ -587,6 +587,7 @@ export function NeuralTapestry({
           title={overclock ? "Overclock ON — caps bypassed, dense stream" : "Engage overclock"}
         >
           ⚡ overclock {overclock ? "ON" : "off"}
+        </button>
         {/* AI control loop status — clickable to toggle on/off. */}
         <button
           onClick={() => setAiEnabled((v) => !v)}
