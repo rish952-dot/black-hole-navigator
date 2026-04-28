@@ -575,6 +575,18 @@ export function NeuralTapestry({
         >
           Reset view
         </Button>
+        {/* OVERCLOCK — full-send: bypass caps, denser stream, max impulses. */}
+        <button
+          onClick={() => setOverclock((v) => !v)}
+          className={cn(
+            "pointer-events-auto rounded border px-2 py-1 font-mono text-[10px] uppercase tracking-widest backdrop-blur-md transition-all",
+            overclock
+              ? "animate-pulse border-[hsl(0_85%_60%)] bg-[hsl(0_85%_60%/0.15)] text-[hsl(0_85%_75%)] shadow-[0_0_20px_hsl(0_85%_60%/0.5)]"
+              : "border-muted bg-black/60 text-muted-foreground hover:text-foreground",
+          )}
+          title={overclock ? "Overclock ON — caps bypassed, dense stream" : "Engage overclock"}
+        >
+          ⚡ overclock {overclock ? "ON" : "off"}
         {/* AI control loop status — clickable to toggle on/off. */}
         <button
           onClick={() => setAiEnabled((v) => !v)}
