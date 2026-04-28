@@ -1,7 +1,1 @@
-project_id = "default"
-
-[functions.ai-node-tick]
-verify_jwt = false
-
-[functions.ai-node-stream]
-verify_jwt = false
+project_id = "mimvvbustuwedfjrwtmi"
