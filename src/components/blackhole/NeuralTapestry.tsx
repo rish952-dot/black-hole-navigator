@@ -138,6 +138,8 @@ export function NeuralTapestry({
   // Caps ref so the streaming callback always sees the freshest caps without rebinding.
   const capsRef = useRef(actionCaps);
   capsRef.current = actionCaps;
+  const overclockRef = useRef(overclock);
+  overclockRef.current = overclock;
   // Latest snapshot ref so the polling loop always sees fresh values.
   const snapshotRef = useRef({
     curvature: 0.5,
@@ -332,10 +334,14 @@ export function NeuralTapestry({
     error: streamError,
     streamCount,
     directiveCount: streamDirCount,
+    lastLatencyMs: streamLatency,
   } = useAIStream({
     disabled: !aiEnabled,
     getSnapshot,
     onDirective: onStreamDirective,
+    provider: debugProvider,
+    overclock,
+    onDebugEvent: handleDebugEvent,
   });
 
   // SELF-HEALING governor — runs locally at 2Hz. When stability collapses or
