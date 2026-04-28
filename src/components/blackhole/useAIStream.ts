@@ -2,23 +2,31 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { AI_FN_BASE, AI_PUB_KEY, type AIDirective, type AIDirectiveAction, type AIFieldSnapshot } from "./useAINodes";
 
 /**
- * useAIStream — opens a long-lived SSE connection to the ai-node-stream edge
- * function. The function streams individual directives as fast as the model
- * produces them; we forward each one to `onDirective`.
+ * useAIStream — long-lived SSE to ai-node-stream edge function.
  *
- * Reconnect strategy:
- *   - When the upstream emits {type:"done"}, we wait `cooldownMs` and reopen
- *     with a fresh snapshot.
- *   - On 402 (credits) we permanently stop and surface the error.
- *   - On 429 (rate limit) we back off for `backoffMs` then retry.
- *   - On any other error we retry with exponential backoff (capped at 30s).
+ * Adds:
+ *   - `provider`: "default" (Lovable AI) or "debug" (external API key)
+ *   - `overclock`: bumps requested directive count and tightens cooldown
+ *   - `onDebugEvent`: opaque tap that mirrors every parsed SSE frame so the
+ *     AI Debug Panel can render a raw event log without re-parsing.
  */
+export type StreamProvider = "default" | "debug";
+
+export interface DebugEvent {
+  ts: number;
+  kind: "open" | "directive" | "error" | "done" | "http" | "reconnect";
+  payload: unknown;
+}
+
 interface StreamOptions {
   disabled?: boolean;
   getSnapshot: () => AIFieldSnapshot;
   onDirective: (d: AIDirective) => void;
-  cooldownMs?: number;   // gap between successful sessions (default 1500)
-  backoffMs?: number;    // backoff after 429 (default 15000)
+  cooldownMs?: number;
+  backoffMs?: number;
+  provider?: StreamProvider;
+  overclock?: boolean;
+  onDebugEvent?: (e: DebugEvent) => void;
 }
 
 const FN_URL = AI_FN_BASE ? `${AI_FN_BASE}/ai-node-stream` : null;
@@ -29,16 +37,30 @@ export function useAIStream({
   onDirective,
   cooldownMs = 1500,
   backoffMs = 15000,
+  provider = "default",
+  overclock = false,
+  onDebugEvent,
 }: StreamOptions) {
   const [status, setStatus] = useState<"idle" | "connecting" | "open" | "error" | "stopped">("idle");
   const [error, setError] = useState<string | null>(null);
   const [streamCount, setStreamCount] = useState(0);
   const [directiveCount, setDirectiveCount] = useState(0);
+  const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
+
   const stoppedRef = useRef(false);
   const onDirectiveRef = useRef(onDirective);
   onDirectiveRef.current = onDirective;
   const getSnapshotRef = useRef(getSnapshot);
   getSnapshotRef.current = getSnapshot;
+  const onDebugRef = useRef(onDebugEvent);
+  onDebugRef.current = onDebugEvent;
+
+  const emit = useCallback((kind: DebugEvent["kind"], payload: unknown) => {
+    onDebugRef.current?.({ ts: Date.now(), kind, payload });
+  }, []);
+
+  // Effective cooldown is shorter in overclock mode.
+  const effCooldown = overclock ? 0 : cooldownMs;
 
   useEffect(() => {
     if (disabled) return;
@@ -57,16 +79,20 @@ export function useAIStream({
       if (stoppedRef.current) return;
       setStatus("connecting");
       abortController = new AbortController();
+      const t0 = performance.now();
       try {
+        const snap = getSnapshotRef.current();
         const resp = await fetch(FN_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             ...(AI_PUB_KEY ? { Authorization: `Bearer ${AI_PUB_KEY}` } : {}),
           },
-          body: JSON.stringify(getSnapshotRef.current()),
+          body: JSON.stringify({ ...snap, provider, overclock }),
           signal: abortController.signal,
         });
+
+        emit("http", { status: resp.status, provider, overclock });
 
         if (resp.status === 402) {
           setError("AI credits exhausted — stream stopped");
@@ -84,7 +110,7 @@ export function useAIStream({
           throw new Error(`HTTP ${resp.status}`);
         }
 
-        attempt = 0; // reset backoff on a successful open
+        attempt = 0;
         setStreamCount((n) => n + 1);
 
         const reader = resp.body.getReader();
@@ -108,29 +134,36 @@ export function useAIStream({
               if (evt.type === "open") {
                 setStatus("open");
                 setError(null);
+                setLastLatencyMs(performance.now() - t0);
+                emit("open", evt);
               } else if (evt.type === "directive" && evt.directive) {
                 onDirectiveRef.current(evt.directive as AIDirective);
                 setDirectiveCount((n) => n + 1);
+                emit("directive", evt.directive);
               } else if (evt.type === "error") {
                 setError(String(evt.message ?? "stream error"));
+                emit("error", evt);
+              } else if (evt.type === "done") {
+                emit("done", evt);
               }
-              // {type:"done"} → loop will exit naturally on next reader.read()
             } catch {
-              /* swallow malformed frames */
+              /* malformed frame */
             }
           }
         }
 
-        // Successful end-of-stream → cool down then reconnect with fresh snapshot.
         if (!stoppedRef.current) {
-          reconnectTimer = window.setTimeout(runOnce, cooldownMs);
+          emit("reconnect", { afterMs: effCooldown });
+          reconnectTimer = window.setTimeout(runOnce, effCooldown);
         }
       } catch (e) {
         if (stoppedRef.current) return;
         attempt++;
         const wait = Math.min(30000, 1000 * 2 ** Math.min(attempt, 5));
         setStatus("error");
-        setError(e instanceof Error ? e.message : "Network error");
+        const msg = e instanceof Error ? e.message : "Network error";
+        setError(msg);
+        emit("error", { message: msg });
         reconnectTimer = window.setTimeout(runOnce, wait);
       }
     };
@@ -142,16 +175,15 @@ export function useAIStream({
       abortController?.abort();
       if (reconnectTimer !== null) clearTimeout(reconnectTimer);
     };
-  }, [disabled, cooldownMs, backoffMs]);
+  }, [disabled, effCooldown, backoffMs, provider, overclock, emit]);
 
-  return { status, error, streamCount, directiveCount };
+  return { status, error, streamCount, directiveCount, lastLatencyMs };
 }
 
 // ---------------------------------------------------------------------------
 // Per-action intensity caps
 // ---------------------------------------------------------------------------
 
-/** 0 = action disabled entirely; 1 = no cap. Applied to |intensity|. */
 export type ActionCaps = Record<AIDirectiveAction, number>;
 
 export const DEFAULT_ACTION_CAPS: ActionCaps = {
@@ -162,12 +194,6 @@ export const DEFAULT_ACTION_CAPS: ActionCaps = {
   anomaly: 1,
 };
 
-/**
- * Clamp a directive against the user-defined per-action caps.
- *
- *   - If the cap for this action is 0, the directive is dropped (returns null).
- *   - Otherwise intensity is clamped so |intensity| <= cap, preserving sign.
- */
 export function clampDirective(d: AIDirective, caps: ActionCaps): AIDirective | null {
   const cap = caps[d.action];
   if (cap <= 0) return null;
@@ -190,31 +216,19 @@ export interface HealingState {
 }
 
 export interface HealingActions {
-  /** Release all isolated/frozen AI nodes and zero their boost. */
   releaseAllAI: () => void;
-  /** Mark broken edges as repaired (visual). */
   repairBrokenEdges: () => void;
-  /** Apply a soft, randomized boost across the AI ring to inject motion. */
   pulseRandomBoosts: (intensity: number) => void;
 }
 
 interface HealOptions {
   enabled: boolean;
-  /** Trigger heal when stability drops below this (0..1). Default 0.25. */
   stabilityThreshold?: number;
-  /** Minimum gap between heal cycles, ms. Default 4000. */
   cooldownMs?: number;
-  /** Source of current readings — called on every tick. */
   read: () => HealingState;
   actions: HealingActions;
 }
 
-/**
- * useSelfHealing — runs a 500ms heartbeat that watches stability/broken-edge
- * counts and, when both are critical, dispatches release + repair + a small
- * randomized motion pulse so the field visibly recovers without waiting on
- * the AI poll/stream loop.
- */
 export function useSelfHealing({
   enabled,
   stabilityThreshold = 0.25,
