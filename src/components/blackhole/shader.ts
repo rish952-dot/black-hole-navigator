@@ -227,10 +227,24 @@ export const blackHoleFragment = /* glsl */ `
 
     if (uMode != 2) {
       vec3 stars = starfield(v);
-      // Dark matter halo: add faint diffuse glow proportional to integrated DM column
+      // Dark matter halo: add a much more visible diffuse glow plus a faint
+      // ring at the NFW scale radius — gives the BH a tangible halo presence.
       if (uDarkMatter > 0.001) {
-        float halo = uDarkMatter * 0.05 * exp(-length(p) / max(uHaloScale * 2.0 * uMass, 1.0));
-        stars += vec3(0.15, 0.1, 0.35) * halo;
+        float rh = max(uHaloScale * 2.0 * uMass, 1.0);
+        float radial = length(p);
+        float halo = uDarkMatter * 0.18 * exp(-radial / rh);
+        // Soft ring at scale radius — Gaussian band visible against starfield.
+        float band = exp(-pow((radial - rh) / (rh * 0.35), 2.0));
+        halo += uDarkMatter * 0.12 * band;
+        stars += vec3(0.35, 0.18, 0.55) * halo;
+      }
+      // Kerr ergosphere outline: when spin is high, draw a faint cyan ring
+      // at r ≈ r_s * (1 + sqrt(1 - a²·cos²θ)) projected onto the equator.
+      if (uSpin > 0.5 && uFrameDrag > 0.001) {
+        float erg = (2.0 * uMass) * (1.0 + sqrt(max(1.0 - uSpin * uSpin * 0.2, 0.0)));
+        float dist = abs(length(p.xz) - erg);
+        float ring = exp(-dist * dist * 6.0) * (uSpin - 0.5) * 2.0 * uFrameDrag;
+        stars += vec3(0.2, 0.7, 1.0) * ring * 0.4;
       }
       col += stars * (1.0 - alpha);
     }
