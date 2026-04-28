@@ -195,11 +195,17 @@ export const blackHoleFragment = /* glsl */ `
           vec3 emit = diskEmission(rh / r_s, phi + uSpin * t * 0.3, t);
           emit *= pow(shift, 3.0);
           emit *= mix(vec3(1.2, 0.7, 0.5), vec3(0.6, 0.85, 1.3), clamp(shift - 0.5, 0.0, 1.0));
-          // Thermal false-color overlay: blue (cold ~6000 K) → red (hot ~10⁷ K)
+          // Thermal false-color overlay — physically-motivated blackbody ramp
+          // from cold (deep blue) → hot (white-yellow) → ultra-hot (red giant
+          // X-ray); brightness scales with T^4 (Stefan-Boltzmann).
           if (uThermal > 0.001) {
             float Tnorm = clamp(pow(rh / r_s, -0.75) * 4.0, 0.0, 1.0);
-            vec3 thermal = mix(vec3(0.05, 0.15, 0.9), mix(vec3(0.95, 0.85, 0.1), vec3(1.0, 0.1, 0.05), smoothstep(0.5, 1.0, Tnorm)), smoothstep(0.0, 0.5, Tnorm));
-            emit = mix(emit, thermal * 2.5 * Tnorm, uThermal);
+            vec3 cold = vec3(0.05, 0.18, 1.0);
+            vec3 warm = vec3(1.0, 0.85, 0.2);
+            vec3 hot  = vec3(1.0, 0.25, 0.1);
+            vec3 thermal = mix(cold, mix(warm, hot, smoothstep(0.55, 1.0, Tnorm)), smoothstep(0.0, 0.55, Tnorm));
+            float bright = 3.5 * pow(Tnorm, 1.5) + 0.4;
+            emit = mix(emit, thermal * bright, uThermal);
           }
           if (uDarkOnly > 0.5) emit *= 0.0;
 
@@ -227,10 +233,24 @@ export const blackHoleFragment = /* glsl */ `
 
     if (uMode != 2) {
       vec3 stars = starfield(v);
-      // Dark matter halo: add faint diffuse glow proportional to integrated DM column
+      // Dark matter halo: add a much more visible diffuse glow plus a faint
+      // ring at the NFW scale radius — gives the BH a tangible halo presence.
       if (uDarkMatter > 0.001) {
-        float halo = uDarkMatter * 0.05 * exp(-length(p) / max(uHaloScale * 2.0 * uMass, 1.0));
-        stars += vec3(0.15, 0.1, 0.35) * halo;
+        float rh = max(uHaloScale * 2.0 * uMass, 1.0);
+        float radial = length(p);
+        float halo = uDarkMatter * 0.18 * exp(-radial / rh);
+        // Soft ring at scale radius — Gaussian band visible against starfield.
+        float band = exp(-pow((radial - rh) / (rh * 0.35), 2.0));
+        halo += uDarkMatter * 0.12 * band;
+        stars += vec3(0.35, 0.18, 0.55) * halo;
+      }
+      // Kerr ergosphere outline: when spin is high, draw a faint cyan ring
+      // at r ≈ r_s * (1 + sqrt(1 - a²·cos²θ)) projected onto the equator.
+      if (uSpin > 0.5 && uFrameDrag > 0.001) {
+        float erg = (2.0 * uMass) * (1.0 + sqrt(max(1.0 - uSpin * uSpin * 0.2, 0.0)));
+        float dist = abs(length(p.xz) - erg);
+        float ring = exp(-dist * dist * 6.0) * (uSpin - 0.5) * 2.0 * uFrameDrag;
+        stars += vec3(0.2, 0.7, 1.0) * ring * 0.4;
       }
       col += stars * (1.0 - alpha);
     }

@@ -35,8 +35,11 @@ import {
   clampDirective,
   DEFAULT_ACTION_CAPS,
   type ActionCaps,
+  type DebugEvent,
+  type StreamProvider,
 } from "./useAIStream";
 import { AIActionCapsPanel } from "./views/AIActionCapsPanel";
+import { AIDebugPanel } from "./views/AIDebugPanel";
 
 /** Dedicated AI nodes — 6 core actuators + 65 governors that help steer them. */
 const CORE_AI_NODE_COUNT = 6;
@@ -114,7 +117,14 @@ export function NeuralTapestry({
   const [aiError, setAiError] = useState<string | null>(null);
   // Per-action intensity caps — clamps directive magnitudes; 0 disables an action.
   const [actionCaps, setActionCaps] = useState<ActionCaps>(DEFAULT_ACTION_CAPS);
-  // Per-AI-node rolling activity record — drives the AIActivityPanel.
+  // OVERCLOCK — full-send mode: removes caps, denser stream, max impulses.
+  const [overclock, setOverclock] = useState(false);
+  // AI debug provider + rolling event log (last 100).
+  const [debugProvider, setDebugProvider] = useState<StreamProvider>("default");
+  const [debugEvents, setDebugEvents] = useState<DebugEvent[]>([]);
+  const handleDebugEvent = useCallback((e: DebugEvent) => {
+    setDebugEvents((prev) => [e, ...prev].slice(0, 100));
+  }, []);
   const [aiStats, setAiStats] = useState<AINodeStat[]>(() =>
     Array.from({ length: AI_NODE_COUNT }, (_, i) =>
       emptyStat(i, i >= CORE_AI_NODE_COUNT),
@@ -128,6 +138,8 @@ export function NeuralTapestry({
   // Caps ref so the streaming callback always sees the freshest caps without rebinding.
   const capsRef = useRef(actionCaps);
   capsRef.current = actionCaps;
+  const overclockRef = useRef(overclock);
+  overclockRef.current = overclock;
   // Latest snapshot ref so the polling loop always sees fresh values.
   const snapshotRef = useRef({
     curvature: 0.5,
@@ -220,10 +232,12 @@ export function NeuralTapestry({
   const applyDirectives = useCallback(
     (directives: AIDirective[]) => {
       // Clamp via current caps; drop any whose action is fully disabled.
+      // In overclock mode, caps are bypassed entirely (full-send).
       const caps = capsRef.current;
+      const oc = overclockRef.current;
       const clamped: AIDirective[] = [];
       for (const d of directives) {
-        const cd = clampDirective(d, caps);
+        const cd = oc ? d : clampDirective(d, caps);
         if (cd) clamped.push(cd);
       }
       if (clamped.length === 0) return;
@@ -320,10 +334,14 @@ export function NeuralTapestry({
     error: streamError,
     streamCount,
     directiveCount: streamDirCount,
+    lastLatencyMs: streamLatency,
   } = useAIStream({
     disabled: !aiEnabled,
     getSnapshot,
     onDirective: onStreamDirective,
+    provider: debugProvider,
+    overclock,
+    onDebugEvent: handleDebugEvent,
   });
 
   // SELF-HEALING governor — runs locally at 2Hz. When stability collapses or
@@ -509,6 +527,18 @@ export function NeuralTapestry({
         />
         <AIActivityPanel stats={aiStats} className="w-56" />
         <AIActionCapsPanel value={actionCaps} onChange={setActionCaps} className="w-56" />
+        <AIDebugPanel
+          className="w-56"
+          events={debugEvents}
+          status={streamStatus}
+          streamCount={streamCount}
+          directiveCount={streamDirCount}
+          lastLatencyMs={streamLatency}
+          provider={debugProvider}
+          onProviderChange={setDebugProvider}
+          overclock={overclock}
+          debugProviderConfigured={true}
+        />
         {healEvents.length > 0 && (
           <div className="rounded border border-[hsl(140_60%_55%/0.4)] bg-black/70 px-2 py-1 font-mono text-[9px] text-[hsl(140_60%_75%)] backdrop-blur-md">
             <div className="uppercase tracking-widest opacity-70">self-heal</div>
@@ -545,6 +575,19 @@ export function NeuralTapestry({
         >
           Reset view
         </Button>
+        {/* OVERCLOCK — full-send: bypass caps, denser stream, max impulses. */}
+        <button
+          onClick={() => setOverclock((v) => !v)}
+          className={cn(
+            "pointer-events-auto rounded border px-2 py-1 font-mono text-[10px] uppercase tracking-widest backdrop-blur-md transition-all",
+            overclock
+              ? "animate-pulse border-[hsl(0_85%_60%)] bg-[hsl(0_85%_60%/0.15)] text-[hsl(0_85%_75%)] shadow-[0_0_20px_hsl(0_85%_60%/0.5)]"
+              : "border-muted bg-black/60 text-muted-foreground hover:text-foreground",
+          )}
+          title={overclock ? "Overclock ON — caps bypassed, dense stream" : "Engage overclock"}
+        >
+          ⚡ overclock {overclock ? "ON" : "off"}
+        </button>
         {/* AI control loop status — clickable to toggle on/off. */}
         <button
           onClick={() => setAiEnabled((v) => !v)}
