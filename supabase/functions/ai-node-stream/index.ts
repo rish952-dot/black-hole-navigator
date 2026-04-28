@@ -1,11 +1,15 @@
 // AI node STREAM — long-lived SSE that emits single-node directives as the
-// model produces them. Each connection runs one streaming chat completion
-// against the Lovable AI Gateway, parses the streamed JSON-array tool-call
-// arguments incrementally, and forwards each completed `{nodeId, action,
-// intensity, reason}` object to the client as an SSE `data:` frame.
+// model produces them.
 //
-// The client (useAIStream) reconnects every ~25s with a fresh field snapshot,
-// so the model always reasons about current state.
+// Two providers are supported:
+//   - default: Lovable AI Gateway (LOVABLE_API_KEY, model google/gemini-3-flash-preview)
+//   - debug:   external OpenAI-compatible endpoint via AI_DEBUG_API_KEY +
+//              AI_DEBUG_BASE_URL (+ AI_DEBUG_MODEL). Selected by passing
+//              { provider: "debug" } in the request body. Used by the AI Debug
+//              Panel to A/B compare directives from a third-party model.
+//
+// Overclock mode (?overclock=1 OR { overclock: true }) bumps the requested
+// directive count from ~50 to ~120 so the client gets a much denser drip.
 
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2.95.0/cors";
 
@@ -20,55 +24,80 @@ interface FieldSnapshot {
   totalNodes: number;
 }
 
+interface RequestBody extends FieldSnapshot {
+  provider?: "default" | "debug";
+  overclock?: boolean;
+}
+
 const TOTAL_AI_NODES = 71;
 
-const SYSTEM_PROMPT = `You are a LIVING control loop for a black-hole neural-mesh
+const baseSystemPrompt = (target: number) => `You are a LIVING control loop for a black-hole neural-mesh
 simulation with ${TOTAL_AI_NODES} embedded AI nodes (ids 0-5 = CORE actuators,
 6-70 = GOVERNORS that fine-tune the core).
 
-You are streaming directives in real time. Emit a long sequence (40-80 items)
+You are streaming directives in real time. Emit a long sequence (~${target} items)
 of small, decisive directives that:
 - SELF-HEAL the field when stability drops or anomalies spike (release stuck
   isolated nodes, freeze runaway nodes briefly, then release).
 - Inject RAPID MOVEMENT when stability is healthy: vary boost direction,
-  occasionally fire short \"anomaly\" pulses on a couple of nodes for visual
+  occasionally fire short "anomaly" pulses on a couple of nodes for visual
   drama, then release them.
 - Spread directives across many node ids — never spam the same node.
 - Keep most intensities mild (|x| < 0.5); only push to 0.8+ for brief impulses.
 - Reasons must be < 50 chars.
 
-Emit directives via the emit_directive tool, one call per directive.`;
+Emit one minified JSON object per line, no markdown.`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    const body: RequestBody = await req.json();
+    const { provider, overclock, ...snapshot } = body;
+    const useDebug = provider === "debug";
+    const targetCount = overclock ? 120 : 50;
 
-    const snapshot: FieldSnapshot = await req.json();
+    let endpoint: string;
+    let apiKey: string;
+    let model: string;
 
-    // We can't reliably stream tool-call arrays incrementally across all
-    // models, so we ask for plain JSON-Lines text output and parse line-by-line
-    // on the gateway response. The model is asked to emit one JSON object per
-    // line, which is trivial to parse from a token stream.
-    const upstream = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    if (useDebug) {
+      const debugKey = Deno.env.get("AI_DEBUG_API_KEY");
+      const debugBase = Deno.env.get("AI_DEBUG_BASE_URL");
+      if (!debugKey || !debugBase) {
+        return new Response(
+          JSON.stringify({ error: "Debug provider not configured (AI_DEBUG_API_KEY / AI_DEBUG_BASE_URL missing)" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      endpoint = `${debugBase.replace(/\/$/, "")}/chat/completions`;
+      apiKey = debugKey;
+      model = Deno.env.get("AI_DEBUG_MODEL") ?? "gpt-4o-mini";
+    } else {
+      const lovKey = Deno.env.get("LOVABLE_API_KEY");
+      if (!lovKey) throw new Error("LOVABLE_API_KEY not configured");
+      endpoint = "https://ai.gateway.lovable.dev/v1/chat/completions";
+      apiKey = lovKey;
+      model = "google/gemini-3-flash-preview";
+    }
+
+    const upstream = await fetch(endpoint, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model,
         stream: true,
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: baseSystemPrompt(targetCount) },
           {
             role: "system",
             content: `Output format: one minified JSON object per line, no
 markdown, no commentary. Each line MUST match:
 {"nodeId":<0-${TOTAL_AI_NODES - 1}>,"action":"boost|freeze|isolate|release|anomaly","intensity":<-1..1>,"reason":"<short>"}
-Emit ~50 lines spread across many nodeIds, then stop.`,
+Emit ~${targetCount} lines spread across many nodeIds, then stop.`,
           },
           {
             role: "user",
@@ -79,44 +108,32 @@ Emit ~50 lines spread across many nodeIds, then stop.`,
     });
 
     if (upstream.status === 429) {
-      return new Response(
-        JSON.stringify({ error: "Rate limited" }),
-        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ error: "Rate limited" }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     if (upstream.status === 402) {
-      return new Response(
-        JSON.stringify({ error: "Credits exhausted" }),
-        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ error: "Credits exhausted" }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     if (!upstream.ok || !upstream.body) {
       const t = await upstream.text();
       console.error("AI gateway error", upstream.status, t);
-      return new Response(
-        JSON.stringify({ error: "Gateway error" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ error: `Gateway error ${upstream.status}` }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Transform the upstream OpenAI-style SSE chat stream into our own SSE
-    // stream of single directive objects.
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
 
     const stream = new ReadableStream({
       async start(controller) {
         const reader = upstream.body!.getReader();
-        let upBuf = "";   // upstream SSE buffer
-        let textBuf = ""; // accumulated assistant text (where JSON lines live)
+        let upBuf = "";
+        let textBuf = "";
         let done = false;
 
         const send = (obj: unknown) => {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
         };
 
-        // Ping to confirm the stream opened immediately on the client.
-        send({ type: "open" });
+        send({ type: "open", provider: useDebug ? "debug" : "default", model, overclock: !!overclock });
 
         const flushTextLines = () => {
           let nl: number;
@@ -124,8 +141,6 @@ Emit ~50 lines spread across many nodeIds, then stop.`,
             const line = textBuf.slice(0, nl).trim();
             textBuf = textBuf.slice(nl + 1);
             if (!line) continue;
-            // The model occasionally fences output despite instructions —
-            // strip leading/trailing backticks / json markers.
             const cleaned = line.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
             if (!cleaned.startsWith("{")) continue;
             try {
@@ -138,7 +153,6 @@ Emit ~50 lines spread across many nodeIds, then stop.`,
                 send({ type: "directive", directive: obj });
               }
             } catch {
-              // Partial line — push back and wait.
               textBuf = cleaned + "\n" + textBuf;
               return;
             }
@@ -151,7 +165,6 @@ Emit ~50 lines spread across many nodeIds, then stop.`,
             if (rDone) break;
             upBuf += decoder.decode(value, { stream: true });
 
-            // Parse upstream OpenAI-style SSE: lines beginning with "data: ".
             let nl: number;
             while ((nl = upBuf.indexOf("\n")) !== -1) {
               const raw = upBuf.slice(0, nl).replace(/\r$/, "");
@@ -168,12 +181,9 @@ Emit ~50 lines spread across many nodeIds, then stop.`,
                   textBuf += delta;
                   flushTextLines();
                 }
-              } catch {
-                /* incomplete chunk — wait for more */
-              }
+              } catch { /* incomplete */ }
             }
           }
-          // Final flush of any trailing object.
           if (textBuf.trim()) {
             textBuf += "\n";
             flushTextLines();
@@ -198,9 +208,6 @@ Emit ~50 lines spread across many nodeIds, then stop.`,
     });
   } catch (e) {
     console.error("ai-node-stream error", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
