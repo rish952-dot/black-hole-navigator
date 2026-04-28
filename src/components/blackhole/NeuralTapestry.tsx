@@ -230,10 +230,12 @@ export function NeuralTapestry({
   const applyDirectives = useCallback(
     (directives: AIDirective[]) => {
       // Clamp via current caps; drop any whose action is fully disabled.
+      // In overclock mode, caps are bypassed entirely (full-send).
       const caps = capsRef.current;
+      const oc = overclockRef.current;
       const clamped: AIDirective[] = [];
       for (const d of directives) {
-        const cd = clampDirective(d, caps);
+        const cd = oc ? d : clampDirective(d, caps);
         if (cd) clamped.push(cd);
       }
       if (clamped.length === 0) return;
