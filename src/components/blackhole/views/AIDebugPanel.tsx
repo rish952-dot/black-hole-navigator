@@ -115,11 +115,51 @@ export function AIDebugPanel({
             </button>
           </div>
 
-          <div className="text-[9px] opacity-60">
-            {provider === "debug"
-              ? "Routing through external AI_DEBUG_BASE_URL"
-              : "Routing through Lovable AI Gateway"}
-            {overclock && " · overclock active"}
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[9px] opacity-60">
+              {provider === "debug"
+                ? "Routing through external AI_DEBUG_BASE_URL"
+                : "Routing through Lovable AI Gateway"}
+              {overclock && " · overclock active"}
+            </div>
+            <button
+              onClick={() => {
+                const payload = {
+                  exportedAt: new Date().toISOString(),
+                  provider,
+                  overclock,
+                  status,
+                  streamCount,
+                  directiveCount,
+                  lastLatencyMs,
+                  eventCount: events.length,
+                  // Newest-first → reverse to chronological for analysis.
+                  events: events.slice(0, 100).slice().reverse(),
+                };
+                const blob = new Blob([JSON.stringify(payload, null, 2)], {
+                  type: "application/json",
+                });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+                a.href = url;
+                a.download = `ai-debug-${stamp}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              }}
+              disabled={events.length === 0}
+              className={cn(
+                "shrink-0 rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-wider transition-colors",
+                events.length === 0
+                  ? "border-border opacity-40"
+                  : "border-[hsl(200_70%_60%)] hover:bg-[hsl(200_70%_60%/0.15)]",
+              )}
+              title="Download last 100 debug events as JSON"
+            >
+              ⤓ export
+            </button>
           </div>
 
           <div className="max-h-40 overflow-y-auto rounded border border-border/60 bg-black/40 p-1">
