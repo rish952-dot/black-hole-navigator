@@ -15,6 +15,7 @@ interface Props {
   className?: string;
   events: DebugEvent[];
   status: string;
+  error?: string | null;
   streamCount: number;
   directiveCount: number;
   lastLatencyMs: number | null;
@@ -22,6 +23,7 @@ interface Props {
   onProviderChange: (p: StreamProvider) => void;
   overclock: boolean;
   debugProviderConfigured: boolean;
+  onReconnect?: () => void;
 }
 
 const KIND_COLORS: Record<DebugEvent["kind"], string> = {
