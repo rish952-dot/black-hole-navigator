@@ -47,6 +47,9 @@ export function useAIStream({
   const [directiveCount, setDirectiveCount] = useState(0);
   const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
 
+  // Bumping this triggers the connect effect to tear down + reconnect.
+  const [reconnectNonce, setReconnectNonce] = useState(0);
+
   const stoppedRef = useRef(false);
   const onDirectiveRef = useRef(onDirective);
   onDirectiveRef.current = onDirective;
@@ -67,7 +70,10 @@ export function useAIStream({
     if (!FN_URL) {
       setStatus("error");
       setError("Stream disabled (Cloud not configured)");
-      return;
+      // Soft auto-retry every 10s in case cloud comes online (e.g. user
+      // enables Lovable Cloud without reloading). The bump triggers re-run.
+      const t = window.setInterval(() => setReconnectNonce((n) => n + 1), 10000);
+      return () => clearInterval(t);
     }
 
     stoppedRef.current = false;
@@ -175,9 +181,19 @@ export function useAIStream({
       abortController?.abort();
       if (reconnectTimer !== null) clearTimeout(reconnectTimer);
     };
-  }, [disabled, effCooldown, backoffMs, provider, overclock, emit]);
+  }, [disabled, effCooldown, backoffMs, provider, overclock, emit, reconnectNonce]);
 
-  return { status, error, streamCount, directiveCount, lastLatencyMs };
+  // Manual reconnect — clears any "stopped" latch (e.g. 402 credits exhausted)
+  // and forces the connect effect to re-run from scratch.
+  const reconnect = useCallback(() => {
+    stoppedRef.current = false;
+    setError(null);
+    setStatus("connecting");
+    emit("reconnect", { afterMs: 0, manual: true });
+    setReconnectNonce((n) => n + 1);
+  }, [emit]);
+
+  return { status, error, streamCount, directiveCount, lastLatencyMs, reconnect };
 }
 
 // ---------------------------------------------------------------------------

@@ -15,6 +15,7 @@ interface Props {
   className?: string;
   events: DebugEvent[];
   status: string;
+  error?: string | null;
   streamCount: number;
   directiveCount: number;
   lastLatencyMs: number | null;
@@ -22,6 +23,7 @@ interface Props {
   onProviderChange: (p: StreamProvider) => void;
   overclock: boolean;
   debugProviderConfigured: boolean;
+  onReconnect?: () => void;
 }
 
 const KIND_COLORS: Record<DebugEvent["kind"], string> = {
@@ -58,6 +60,7 @@ export function AIDebugPanel({
   className,
   events,
   status,
+  error,
   streamCount,
   directiveCount,
   lastLatencyMs,
@@ -65,8 +68,10 @@ export function AIDebugPanel({
   onProviderChange,
   overclock,
   debugProviderConfigured,
+  onReconnect,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const isFailed = status === "error" || status === "stopped";
 
   return (
     <div
@@ -115,6 +120,24 @@ export function AIDebugPanel({
             </button>
           </div>
 
+
+          {(isFailed || error) && (
+            <div className="flex items-start gap-1.5 rounded border border-destructive/40 bg-destructive/10 px-1.5 py-1">
+              <div className="min-w-0 flex-1 text-[9px] leading-tight text-destructive">
+                <div className="uppercase tracking-wider opacity-80">stream {status}</div>
+                {error && <div className="truncate opacity-90" title={error}>{error}</div>}
+              </div>
+              {onReconnect && (
+                <button
+                  onClick={onReconnect}
+                  className="shrink-0 rounded border border-destructive/60 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-destructive hover:bg-destructive/20"
+                  title="Reset stream and reconnect now"
+                >
+                  ↻ reconnect
+                </button>
+              )}
+            </div>
+          )}
           <div className="flex items-center justify-between gap-2">
             <div className="text-[9px] opacity-60">
               {provider === "debug"

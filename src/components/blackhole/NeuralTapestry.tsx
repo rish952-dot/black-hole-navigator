@@ -335,6 +335,7 @@ export function NeuralTapestry({
     streamCount,
     directiveCount: streamDirCount,
     lastLatencyMs: streamLatency,
+    reconnect: reconnectStream,
   } = useAIStream({
     disabled: !aiEnabled,
     getSnapshot,
@@ -531,6 +532,7 @@ export function NeuralTapestry({
           className="w-56"
           events={debugEvents}
           status={streamStatus}
+          error={streamError}
           streamCount={streamCount}
           directiveCount={streamDirCount}
           lastLatencyMs={streamLatency}
@@ -538,6 +540,7 @@ export function NeuralTapestry({
           onProviderChange={setDebugProvider}
           overclock={overclock}
           debugProviderConfigured={true}
+          onReconnect={reconnectStream}
         />
         {healEvents.length > 0 && (
           <div className="rounded border border-[hsl(140_60%_55%/0.4)] bg-black/70 px-2 py-1 font-mono text-[9px] text-[hsl(140_60%_75%)] backdrop-blur-md">
