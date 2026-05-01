@@ -335,6 +335,7 @@ export function NeuralTapestry({
     streamCount,
     directiveCount: streamDirCount,
     lastLatencyMs: streamLatency,
+    reconnect: reconnectStream,
   } = useAIStream({
     disabled: !aiEnabled,
     getSnapshot,
