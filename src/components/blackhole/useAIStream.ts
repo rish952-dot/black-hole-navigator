@@ -47,6 +47,9 @@ export function useAIStream({
   const [directiveCount, setDirectiveCount] = useState(0);
   const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
 
+  // Bumping this triggers the connect effect to tear down + reconnect.
+  const [reconnectNonce, setReconnectNonce] = useState(0);
+
   const stoppedRef = useRef(false);
   const onDirectiveRef = useRef(onDirective);
   onDirectiveRef.current = onDirective;
