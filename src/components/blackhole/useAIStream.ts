@@ -70,7 +70,10 @@ export function useAIStream({
     if (!FN_URL) {
       setStatus("error");
       setError("Stream disabled (Cloud not configured)");
-      return;
+      // Soft auto-retry every 10s in case cloud comes online (e.g. user
+      // enables Lovable Cloud without reloading). The bump triggers re-run.
+      const t = window.setInterval(() => setReconnectNonce((n) => n + 1), 10000);
+      return () => clearInterval(t);
     }
 
     stoppedRef.current = false;
