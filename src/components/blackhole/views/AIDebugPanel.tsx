@@ -60,6 +60,7 @@ export function AIDebugPanel({
   className,
   events,
   status,
+  error,
   streamCount,
   directiveCount,
   lastLatencyMs,
@@ -67,8 +68,10 @@ export function AIDebugPanel({
   onProviderChange,
   overclock,
   debugProviderConfigured,
+  onReconnect,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const isFailed = status === "error" || status === "stopped";
 
   return (
     <div
