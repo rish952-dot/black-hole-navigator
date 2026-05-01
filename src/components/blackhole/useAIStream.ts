@@ -178,9 +178,19 @@ export function useAIStream({
       abortController?.abort();
       if (reconnectTimer !== null) clearTimeout(reconnectTimer);
     };
-  }, [disabled, effCooldown, backoffMs, provider, overclock, emit]);
+  }, [disabled, effCooldown, backoffMs, provider, overclock, emit, reconnectNonce]);
 
-  return { status, error, streamCount, directiveCount, lastLatencyMs };
+  // Manual reconnect — clears any "stopped" latch (e.g. 402 credits exhausted)
+  // and forces the connect effect to re-run from scratch.
+  const reconnect = useCallback(() => {
+    stoppedRef.current = false;
+    setError(null);
+    setStatus("connecting");
+    emit("reconnect", { afterMs: 0, manual: true });
+    setReconnectNonce((n) => n + 1);
+  }, [emit]);
+
+  return { status, error, streamCount, directiveCount, lastLatencyMs, reconnect };
 }
 
 // ---------------------------------------------------------------------------
