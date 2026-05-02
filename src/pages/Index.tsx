@@ -30,6 +30,7 @@ import { LigoWaveform } from "@/components/blackhole/views/LigoWaveform";
 import { DataMatrix } from "@/components/blackhole/views/DataMatrix";
 import { IOMeshOverlay } from "@/components/blackhole/views/IOMeshOverlay";
 import { AccretionDiskStudy } from "@/components/blackhole/views/AccretionDiskStudy";
+import { PhysicsBackendPanel } from "@/components/blackhole/views/PhysicsBackendPanel";
 import {
   defaultParams,
   type BlackHoleParams,
