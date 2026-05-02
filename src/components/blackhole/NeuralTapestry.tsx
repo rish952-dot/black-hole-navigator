@@ -299,11 +299,16 @@ export function NeuralTapestry({
         }
       });
 
-      // Camera shake — proportional to biggest impulse this batch, capped
-      // so it stays cinematic, not nauseating.
-      if (maxImpulse > 0.45) {
-        const dur = maxImpulse > 0.85 ? 420 : 240;
-        cameraShakeRef.current = { until: ts + dur, amp: Math.min(0.35, maxImpulse * 0.35) };
+      // Camera shake — only fires on genuinely big impulses so the camera
+      // stays cinematic and doesn't feel jittery during normal AI activity.
+      // Amplitude is capped tight; visual interest comes from node pulses,
+      // not the camera bouncing every 3s.
+      if (maxImpulse > 0.7) {
+        const dur = maxImpulse > 0.9 ? 260 : 160;
+        cameraShakeRef.current = {
+          until: ts + dur,
+          amp: Math.min(0.08, (maxImpulse - 0.7) * 0.18),
+        };
       }
 
       bumpVisuals();
@@ -668,17 +673,24 @@ function CameraRig({
     if (focusOn) camera.lookAt(target.current);
 
     // Camera shake — tiny per-frame jitter on top of OrbitControls' position.
-    // We sample noise-style offsets that decay smoothly to zero.
+    // Lower-frequency sinusoids + ease-in/ease-out envelope (smoothstep on
+    // remain/duration) so the shake feels like a soft camera bump rather
+    // than a high-frequency vibration.
     if (shakeRef) {
       const now = performance.now();
-      const remain = shakeRef.current.until - now;
-      if (remain > 0 && shakeRef.current.amp > 0) {
-        const k = Math.min(1, remain / 220) * shakeRef.current.amp;
+      const until = shakeRef.current.until;
+      const amp = shakeRef.current.amp;
+      const totalDur = 260; // matches max emit duration
+      const remain = until - now;
+      if (remain > 0 && amp > 0) {
+        // Smooth envelope: ramps in over first 25% then decays smoothly.
+        const u = Math.max(0, Math.min(1, remain / totalDur));
+        const env = u * u * (3 - 2 * u); // smoothstep
+        const k = env * amp;
         const t = state.clock.elapsedTime;
-        const ox = Math.sin(t * 73.0) * k;
-        const oy = Math.cos(t * 91.0) * k;
-        const oz = Math.sin(t * 51.0 + 1.7) * k * 0.5;
-        // Subtract previous shake, add new — keeps OrbitControls happy.
+        const ox = Math.sin(t * 11.0) * k;
+        const oy = Math.cos(t * 13.0) * k * 0.7;
+        const oz = Math.sin(t * 9.0 + 1.7) * k * 0.4;
         camera.position.sub(shakeOffset.current);
         shakeOffset.current.set(ox, oy, oz);
         camera.position.add(shakeOffset.current);
