@@ -67,6 +67,14 @@ export function BlackHoleQuad({ params }: Props) {
   const matRef = useRef<THREE.ShaderMaterial>(null);
   const { size } = useThree();
 
+  // Pre-allocated math scratch — reused every frame to avoid GC pressure that
+  // was visibly stuttering the BH viewports under heavy AI activity.
+  const camPos = useRef(new THREE.Vector3());
+  const fwdV = useRef(new THREE.Vector3());
+  const rightV = useRef(new THREE.Vector3());
+  const upV = useRef(new THREE.Vector3());
+  const worldUp = useRef(new THREE.Vector3(0, 1, 0));
+
   const uniforms = useMemo(
     () => ({
       uResolution: { value: new THREE.Vector2(size.width, size.height) },
@@ -127,20 +135,20 @@ export function BlackHoleQuad({ params }: Props) {
     const azim = params.cameraOrbit + (params.autoRotate ? t * 0.08 : 0);
     const elev = params.cameraElevation;
     const d = params.cameraDistance;
-    const cx = Math.cos(elev) * Math.cos(azim) * d;
-    const cy = Math.sin(elev) * d;
-    const cz = Math.cos(elev) * Math.sin(azim) * d;
-    const pos = new THREE.Vector3(cx, cy, cz);
-    u.uCamPos.value.copy(pos);
+    camPos.current.set(
+      Math.cos(elev) * Math.cos(azim) * d,
+      Math.sin(elev) * d,
+      Math.cos(elev) * Math.sin(azim) * d,
+    );
+    u.uCamPos.value.copy(camPos.current);
 
-    const fwd = pos.clone().multiplyScalar(-1).normalize();
-    const worldUp = new THREE.Vector3(0, 1, 0);
-    const right = new THREE.Vector3().crossVectors(fwd, worldUp).normalize();
-    const up = new THREE.Vector3().crossVectors(right, fwd).normalize();
+    fwdV.current.copy(camPos.current).multiplyScalar(-1).normalize();
+    rightV.current.crossVectors(fwdV.current, worldUp.current).normalize();
+    upV.current.crossVectors(rightV.current, fwdV.current).normalize();
     u.uCamBasis.value.set(
-      right.x, up.x, fwd.x,
-      right.y, up.y, fwd.y,
-      right.z, up.z, fwd.z,
+      rightV.current.x, upV.current.x, fwdV.current.x,
+      rightV.current.y, upV.current.y, fwdV.current.y,
+      rightV.current.z, upV.current.z, fwdV.current.z,
     );
   });
 

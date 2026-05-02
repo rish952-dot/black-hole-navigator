@@ -30,6 +30,7 @@ import { LigoWaveform } from "@/components/blackhole/views/LigoWaveform";
 import { DataMatrix } from "@/components/blackhole/views/DataMatrix";
 import { IOMeshOverlay } from "@/components/blackhole/views/IOMeshOverlay";
 import { AccretionDiskStudy } from "@/components/blackhole/views/AccretionDiskStudy";
+import { PhysicsBackendPanel } from "@/components/blackhole/views/PhysicsBackendPanel";
 import {
   defaultParams,
   type BlackHoleParams,
@@ -205,6 +206,8 @@ const Index = () => {
             Photon sphere = 3M = {r_photon.toFixed(3)}<br />
             v_orb(ISCO) = {Math.sqrt(1 / 6).toFixed(3)} c
           </div>
+
+          <PhysicsBackendPanel params={current} />
         </TabsContent>
 
         <TabsContent value="exotic" className="space-y-4 px-4 pb-6">
