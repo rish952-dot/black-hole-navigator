@@ -107,9 +107,9 @@ export function useAIStream({
           return;
         }
         if (resp.status === 429) {
-          setError("Rate limited — backing off");
-          setStatus("error");
-          reconnectTimer = window.setTimeout(runOnce, backoffMs);
+          setError("Rate limited — stream stopped (use ↻ reconnect)");
+          setStatus("stopped");
+          stoppedRef.current = true;
           return;
         }
         if (!resp.ok || !resp.body) {
