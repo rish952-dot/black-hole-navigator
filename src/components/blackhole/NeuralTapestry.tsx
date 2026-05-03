@@ -112,7 +112,7 @@ export function NeuralTapestry({
   const [topoCtl, setTopoCtl] = useState<TopoControls>(DEFAULT_TOPO_CONTROLS);
 
   // AI control loop — 71 dedicated nodes (6 core + 65 governors) ping every ~3s.
-  const [aiEnabled, setAiEnabled] = useState(true);
+  const [aiEnabled, setAiEnabled] = useState(false);
   const [aiDirectives, setAiDirectives] = useState<AIDirective[]>([]);
   const [aiError, setAiError] = useState<string | null>(null);
   // Per-action intensity caps — clamps directive magnitudes; 0 disables an action.
@@ -318,7 +318,7 @@ export function NeuralTapestry({
 
   const getSnapshot = useCallback(() => snapshotRef.current, []);
   const { requestCount: aiReqCount, lastError: aiHookError } = useAINodes({
-    intervalMs: 3000,
+    intervalMs: 30000,
     disabled: !aiEnabled,
     getSnapshot,
     onDirectives: applyDirectives,
