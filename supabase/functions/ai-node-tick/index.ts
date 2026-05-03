@@ -80,26 +80,22 @@ Deno.serve(async (req) => {
                 properties: {
                   directives: {
                     type: "array",
-                    minItems: TOTAL_AI_NODES,
-                    maxItems: TOTAL_AI_NODES,
                     items: {
                       type: "object",
                       properties: {
-                        nodeId: { type: "integer", minimum: 0, maximum: TOTAL_AI_NODES - 1 },
+                        nodeId: { type: "integer" },
                         action: {
                           type: "string",
                           enum: ["boost", "freeze", "isolate", "release", "anomaly"],
                         },
-                        intensity: { type: "number", minimum: -1, maximum: 1 },
-                        reason: { type: "string", maxLength: 60 },
+                        intensity: { type: "number" },
+                        reason: { type: "string" },
                       },
                       required: ["nodeId", "action", "intensity", "reason"],
-                      additionalProperties: false,
                     },
                   },
                 },
                 required: ["directives"],
-                additionalProperties: false,
               },
             },
           },
