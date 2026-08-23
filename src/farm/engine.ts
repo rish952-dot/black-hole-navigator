@@ -2,7 +2,7 @@ import { allocateCapital, breed, diversity, emptyStats, resetAgentIds, select, s
 import { evaluate, execute } from "./executor";
 import { auditAgent, computeFitness } from "./fitness";
 import { Ledger } from "./ledger";
-import { SyntheticMarketplace } from "./marketplace";
+import { SyntheticMarketplace, type OpportunitySource } from "./marketplace";
 import { RNG } from "./rng";
 import { NEUTRAL_MESH, type Agent, type FarmConfig, type GenerationRecord, type MeshField, type TaskRecord } from "./types";
 
@@ -18,14 +18,14 @@ export interface FarmSnapshot {
 }
 
 /**
- * Deterministic, sandboxed evolution engine. No network, no real money:
- * everything runs against the synthetic marketplace.
+ * Deterministic evolution engine. Economic execution remains local to the
+ * farm; external opportunity sources are read-only inputs selected at startup.
  */
 export class FarmEngine {
   cfg: FarmConfig;
   rng: RNG;
   ledger = new Ledger();
-  market = new SyntheticMarketplace();
+  market: OpportunitySource;
   agents: Agent[] = [];
   generations: GenerationRecord[] = [];
   tasks: TaskRecord[] = [];
@@ -33,9 +33,11 @@ export class FarmEngine {
   halted: string | null = null;
   private totalRevenue = 0;
   private totalCosts = 0;
+  private readonly defaultMarket: OpportunitySource = new SyntheticMarketplace();
 
-  constructor(cfg: FarmConfig) {
+  constructor(cfg: FarmConfig, market?: OpportunitySource) {
     this.cfg = cfg;
+    this.market = market ?? this.defaultMarket;
     this.rng = new RNG(cfg.seed);
     this.reset(cfg);
   }
@@ -44,7 +46,7 @@ export class FarmEngine {
     this.cfg = cfg;
     this.rng = new RNG(cfg.seed);
     this.ledger = new Ledger();
-    this.market = new SyntheticMarketplace();
+    this.market = this.market ?? this.defaultMarket;
     this.generations = [];
     this.tasks = [];
     this.generation = 0;
@@ -56,6 +58,10 @@ export class FarmEngine {
     for (const a of this.agents) {
       this.ledger.record(a.id, 0, "initial_capital", a.capital, "seed capital");
     }
+  }
+
+  setOpportunitySource(market: OpportunitySource): void {
+    this.market = market;
   }
 
   /** Runs one full generation: discover -> evaluate -> execute -> score -> evolve. */
@@ -71,7 +77,6 @@ export class FarmEngine {
       a.stats = { ...emptyStats(), flagged: [] };
     }
 
-    // Round-robin opportunity offering: each agent sees a slice of the market.
     const perAgent = Math.max(1, Math.floor(ops.length / Math.max(1, this.agents.length)));
     this.agents.forEach((a, idx) => {
       const slice = ops.slice(idx * perAgent, idx * perAgent + perAgent);
@@ -137,7 +142,6 @@ export class FarmEngine {
       meshField: { ...field },
     };
 
-    // Safety circuit breakers.
     const netTotal = this.totalRevenue - this.totalCosts;
     if (netTotal < -cfg.maxTotalLoss) this.halted = `max total loss exceeded (${netTotal.toFixed(0)})`;
     if (genCosts > cfg.maxDailySpend) this.halted = `daily spend cap exceeded (${genCosts.toFixed(0)})`;
