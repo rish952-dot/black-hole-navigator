@@ -169,10 +169,30 @@ const result = {
   generatedAt: new Date().toISOString(),
 };
 
-const report = `# Mesh Stress Result\n\n- Status: ${result.status}\n- Nodes: ${nodes}\n- Rounds: ${rounds}\n- Vectors/node/round: ${vectorsPerNode}\n- Bus capacity: ${busCapacity}\n- Published vectors: ${published}\n- Peak bus load: ${peakBus}\n- Total receive ops: ${receiveOps}\n- Total vectors received: ${receiveVectors}\n- AI calls: ${aiCalls}\n- AI failures: ${aiFailures}\n- Elapsed: ${elapsedMs.toFixed(1)}ms\n- Throughput: ${(published / Math.max(0.001, elapsedMs / 1000)).toFixed(1)} msg/s\n- Top scores: ${result.topVectorScores.join(", ")}\n`;
+const report = `# Mesh Stress Result
+
+- Status: ${result.status}
+- Nodes: ${nodes}
+- Rounds: ${rounds}
+- Vectors/node/round: ${vectorsPerNode}
+- Bus capacity: ${busCapacity}
+- Published vectors: ${published}
+- Peak bus load: ${peakBus}
+- Total receive ops: ${receiveOps}
+- Total vectors received: ${receiveVectors}
+- AI calls: ${aiCalls}
+- AI failures: ${aiFailures}
+- Elapsed: ${elapsedMs.toFixed(1)}ms
+- Throughput: ${(published / Math.max(0.001, elapsedMs / 1000)).toFixed(1)} msg/s
+- Top scores: ${result.topVectorScores.join(", ")}
+`;
 
 await Bun.write("mesh-stress-results.json", JSON.stringify(result, null, 2));
 await Bun.write("mesh-stress-result.md", report);
-await Bun.write("COPILOT_MESH_STRESS.md", `${report}\n## Copilot handoff\n\nUse this result to optimize src/farm/vector-bus.ts, src/farm/api.ts, and scripts/stress-mesh.ts. Preserve compact protocol.`);
+await Bun.write("COPILOT_MESH_STRESS.md", `${report}
+
+## Copilot handoff
+
+Use this result to optimize src/farm/vector-bus.ts, src/farm/api.ts, and scripts/stress-mesh.ts. Preserve compact protocol.`);
 
 console.log(JSON.stringify(result, null, 2));
