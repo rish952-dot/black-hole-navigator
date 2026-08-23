@@ -13,7 +13,7 @@ const FIXED_PAYOUT_DESTINATION = "0x09a227498B620811fCc11A0F379CF065c4c4238B";
 type BotResult = { botId?: number; netProfit?: number; revenue?: number; costs?: number };
 type Asset = "ETH" | "USDC" | "USDT";
 type State = { dateUtc: string; asset: Asset; chainId: number; transferred: number; txHashes: string[] };
-const ERC20_ABI = ["function transfer(address to, uint256 amount) returns (bool)","function balanceOf(address owner) view returns (uint256)","function decimals() view returns (uint8)"];
+const ERC20_ABI = ["function transfer(address to, uint256 amount) returns (bool)", "function balanceOf(address owner) view returns (uint256)", "function decimals() view returns (uint8)"];
 const num = (v: unknown, fallback = 0) => { const n = Number(v); return Number.isFinite(n) ? n : fallback; };
 const envBool = (name: string) => (process.env[name] ?? "false").toLowerCase() === "true";
 const utcDate = () => new Date().toISOString().slice(0, 10);
@@ -64,7 +64,14 @@ const payouts = results.map((r, i) => { const rawAmount = positiveTotal > 0 ? pa
 await mkdir("farm-output", { recursive: true });
 const stateDefault: State = { dateUtc: utcDate(), asset, chainId, transferred: 0, txHashes: [] };
 let state = stateDefault;
-try { const existing = JSON.parse(await Bun.file(stateFile).text()) as Partial<State>; if (existing.dateUtc === stateDefault.dateUtc && existing.asset === asset && Number(existing.chainId) === chainId) state = { ...stateDefault, transferred: Math.max(0, num(existing.transferred)), txHashes: Array.isArray(existing.txHashes) ? existing.txHashes.map(String).slice(-100) : [] }; } catch {}
+try {
+  const existing = JSON.parse(await Bun.file(stateFile).text()) as Partial<State>;
+  if (existing.dateUtc === stateDefault.dateUtc && existing.asset === asset && Number(existing.chainId) === chainId) {
+    state = { ...stateDefault, transferred: Math.max(0, num(existing.transferred)), txHashes: Array.isArray(existing.txHashes) ? existing.txHashes.map(String).slice(-100) : [] };
+  }
+} catch {
+  // Missing state file is expected on the first run.
+}
 const audit = async (entry: Record<string, unknown>) => { await Bun.write(auditFile, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`, { createPath: true, append: true }); };
 
 if (!real || dryRun) { console.log(JSON.stringify({ status: real ? "REAL_DRY_RUN" : "DISABLED", destination, asset, chainId, revenue: round(revenue), costs: round(costs), netProfit: round(netProfit), payoutPool: round(payoutPool), payouts, transferredToday: state.transferred, maxDaily }, null, 2)); process.exit(0); }
