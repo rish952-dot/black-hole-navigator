@@ -1,0 +1,51 @@
+name: Farm Loop
+
+on:
+  workflow_dispatch:
+    inputs:
+      rounds:
+        description: "Rounds"
+        required: false
+        default: "10"
+      bots:
+        description: "Bots"
+        required: false
+        default: "5"
+  schedule:
+    - cron: "17 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: farm-loop-paper
+  cancel-in-progress: true
+
+jobs:
+  loop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BOT_COUNT: ${{ inputs.bots || '5' }}
+      ROUNDS: ${{ inputs.rounds || '10' }}
+      FARM_POPULATION: "10"
+      OPPORTUNITIES_PER_GEN: "200"
+      FARM_AI_ENABLED: "false"
+      AUTONOMY_AUDIT_FREQUENCY: "5"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: Work/ai-farm-audit
+          fetch-depth: 1
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Run loop
+        run: bun run scripts/run-farm-loop.ts
+      - name: Save loop result
+        uses: actions/upload-artifact@v4
+        with:
+          name: farm-loop-${{ github.run_id }}
+          path: farm-loop-results.json
+          if-no-files-found: error
