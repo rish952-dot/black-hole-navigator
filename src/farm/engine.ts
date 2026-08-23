@@ -17,10 +17,6 @@ export interface FarmSnapshot {
   halted: string | null;
 }
 
-/**
- * Deterministic evolution engine. Economic execution remains local to the
- * farm; external opportunity sources are read-only inputs selected at startup.
- */
 export class FarmEngine {
   cfg: FarmConfig;
   rng: RNG;
@@ -64,25 +60,26 @@ export class FarmEngine {
     this.market = market;
   }
 
-  /** Runs one full generation: discover -> evaluate -> execute -> score -> evolve. */
   step(field: MeshField = NEUTRAL_MESH): GenerationRecord {
     if (this.halted) return this.generations[this.generations.length - 1];
     const cfg = this.cfg;
     const ops = this.market.discoverTasks(cfg.opportunitiesPerGen, this.rng);
-
     let genRevenue = 0;
     let genCosts = 0;
 
-    for (const a of this.agents) {
-      a.stats = { ...emptyStats(), flagged: [] };
-    }
+    for (const a of this.agents) a.stats = { ...emptyStats(), flagged: [] };
 
-    const perAgent = Math.max(1, Math.floor(ops.length / Math.max(1, this.agents.length)));
+    const agentCount = Math.max(1, this.agents.length);
+    const perAgent = Math.max(1, Math.floor(ops.length / agentCount));
+
     this.agents.forEach((a, idx) => {
-      const slice = ops.slice(idx * perAgent, idx * perAgent + perAgent);
+      const start = idx * perAgent;
+      const end = Math.min(start + perAgent, ops.length);
       const nets: number[] = [];
       let offered = 0;
-      for (const op of slice) {
+
+      for (let opIdx = start; opIdx < end; opIdx++) {
+        const op = ops[opIdx];
         offered++;
         const ev = evaluate(a, op, cfg);
         if (!ev.accept) {
