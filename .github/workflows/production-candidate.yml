@@ -1,0 +1,60 @@
+name: Production Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      feed_url:
+        description: "Read-only opportunity feed URL returning {opportunities:[...]}"
+        required: true
+        type: string
+      bots:
+        description: "Bots"
+        required: false
+        default: "5"
+      rounds:
+        description: "Rounds"
+        required: false
+        default: "5"
+      opportunities:
+        description: "Opportunities to ingest"
+        required: false
+        default: "500"
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    environment: farm-production-approval
+    env:
+      OPPORTUNITY_FEED_URL: ${{ inputs.feed_url }}
+      OPPORTUNITY_FEED_TOKEN: ${{ secrets.OPPORTUNITY_FEED_TOKEN }}
+      BOT_COUNT: ${{ inputs.bots }}
+      ROUNDS: ${{ inputs.rounds }}
+      OPPORTUNITIES_PER_GEN: ${{ inputs.opportunities }}
+
+    steps:
+      - name: Checkout farm branch
+        uses: actions/checkout@v4
+        with:
+          ref: Work/ai-farm-audit
+          fetch-depth: 1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Fetch and evaluate external opportunities
+        run: bun run scripts/run-production-candidate.ts
+
+      - name: Upload candidate report
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-candidate-${{ github.run_id }}
+          path: production-candidate-results.json
+          if-no-files-found: error
