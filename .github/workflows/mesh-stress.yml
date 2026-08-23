@@ -1,0 +1,75 @@
+name: Neural Mesh Stress
+
+on:
+  workflow_dispatch:
+    inputs:
+      nodes:
+        description: "Mesh nodes"
+        required: false
+        default: "64"
+      rounds:
+        description: "Stress rounds"
+        required: false
+        default: "20"
+      ai_nodes:
+        description: "Real AI nodes"
+        required: false
+        default: "10"
+  push:
+    branches:
+      - Work/ai-farm-audit
+
+permissions:
+  contents: read
+
+jobs:
+  stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MESH_NODES: ${{ inputs.nodes || '64' }}
+      MESH_ROUNDS: ${{ inputs.rounds || '20' }}
+      AI_NODES: ${{ inputs.ai_nodes || '10' }}
+      VECTORS_PER_NODE: 2
+      MESH_BUS_CAPACITY: 10000
+      AI_CONCURRENCY: 4
+      FARM_AI_ENABLED: ${{ secrets.FARM_AI_API_KEY != '' && 'true' || 'false' }}
+      FARM_AI_API_KEY: ${{ secrets.FARM_AI_API_KEY }}
+      FARM_AI_BASE_URL: ${{ secrets.FARM_AI_BASE_URL }}
+      FARM_AI_MODEL: ${{ secrets.FARM_AI_MODEL }}
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v4
+        with:
+          ref: Work/ai-farm-audit
+          fetch-depth: 1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
+
+      - name: Test
+        run: bun test
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Stress mesh
+        run: bun run scripts/stress-mesh.ts
+
+      - name: Upload mesh results
+        uses: actions/upload-artifact@v4
+        with:
+          name: mesh-stress-report
+          path: |
+            mesh-stress-results.json
+            mesh-stress-result.md
+            COPILOT_MESH_STRESS.md
+          if-no-files-found: error
