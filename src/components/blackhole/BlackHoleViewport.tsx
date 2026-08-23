@@ -46,7 +46,6 @@ export function BlackHoleViewport({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const stopAuto = useCallback(() => {
-    // Pause auto-rotate while the user is actively driving the camera.
     params.autoRotate = false;
   }, [params]);
 
@@ -78,7 +77,6 @@ export function BlackHoleViewport({
         const dx = e.clientX - lastSingle.current.x;
         const dy = e.clientY - lastSingle.current.y;
         if (Math.abs(dx) + Math.abs(dy) > 3) dragMoved.current = true;
-        // Convert pixels → radians. Negate dx so drag-right rotates camera right.
         const rect = containerRef.current?.getBoundingClientRect();
         const w = rect?.width ?? 400;
         const h = rect?.height ?? 400;
@@ -110,10 +108,8 @@ export function BlackHoleViewport({
       if (pointers.current.size < 1) {
         lastSingle.current = null;
         setInteracting(false);
-        // Treat as tap (selection) only if no meaningful drag occurred.
         if (!dragMoved.current && onClick) onClick();
       } else {
-        // Re-seed the surviving pointer as the new single-touch anchor.
         const [first] = Array.from(pointers.current.values());
         lastSingle.current = { ...first };
       }
@@ -147,7 +143,7 @@ export function BlackHoleViewport({
         active
           ? "border-primary shadow-[0_0_30px_hsl(var(--primary)/0.4)]"
           : "border-border hover:border-primary/40",
-        (onClick || true) && "cursor-grab",
+        onClick && "cursor-grab",
         interacting && "cursor-grabbing",
         className,
       )}
@@ -187,7 +183,6 @@ export function BlackHoleViewport({
         )}
       </div>
 
-      {/* Subtle hint for first-time users on touch devices. */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-black/60 to-transparent p-2">
         <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground/80">
           drag · pinch · scroll
