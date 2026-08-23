@@ -21,9 +21,19 @@ on:
         required: false
         default: "200"
       payout_address:
-        description: "Public EVM address for the paper payout report"
+        description: "Public EVM address for the common payout proposal destination"
         required: false
         default: ""
+      payout_asset:
+        description: "Accounting asset for payout proposals"
+        required: false
+        default: "USDC"
+        type: choice
+        options: [USDC, USDT, ETH]
+      payout_share:
+        description: "Profit share used only to build payout proposals"
+        required: false
+        default: "0.5"
   push:
     branches:
       - Work/ai-farm-audit
@@ -116,6 +126,8 @@ jobs:
       FLAG_THRESHOLD: 2
       MAX_VOLATILITY: 0.8
       PAYOUT_ADDRESS: ${{ inputs.payout_address }}
+      PAYOUT_ASSET: ${{ inputs.payout_asset || 'USDC' }}
+      PAYOUT_SHARE: ${{ inputs.payout_share || '0.5' }}
       PAYOUT_CHAIN: ethereum
     steps:
       - name: Checkout audit branch
@@ -144,6 +156,9 @@ jobs:
           cp bot-artifacts/farm-bot-*.json .
           bun run scripts/supervise-farm.ts
 
+      - name: Screen earnings and allocate hosting tiers
+        run: bun run scripts/screen-agents.ts farm-bot-0.json farm-bot-1.json farm-bot-2.json farm-bot-3.json farm-bot-4.json
+
       - name: Build paper payout manifest
         if: always()
         run: bun run scripts/create-payout-manifest.ts
@@ -155,5 +170,6 @@ jobs:
           name: farm-supervisor
           path: |
             farm-supervisor.json
+            agent-screening.json
             farm-output/payout-manifest.json
           if-no-files-found: error
