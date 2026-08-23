@@ -225,7 +225,15 @@ export function NeuralTapestry({
       brokenEdges: errorInfo.broken,
       totalNodes: count,
     };
+    // Symbiosis: publish the live field into the Evolutionary Agent Farm.
+    publishMeshField({
+      curvature: topoField.curvature,
+      energyDensity: topoField.energyDensity,
+      stability: topoField.stability,
+      anomalies: topoField.anomalies,
+    });
   }, [topoField, lod.fps, errorInfo.broken, count]);
+
 
   // Apply AI directives — clamps each via per-action caps, records activity,
   // mutates state, and triggers per-node impulses + camera shake on big moves.
