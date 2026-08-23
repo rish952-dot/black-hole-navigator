@@ -1,0 +1,58 @@
+name: AI Mesh Connectivity Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      providers:
+        description: "Comma-separated providers: xai,gemini,groq,claude,openrouter"
+        required: false
+        default: "xai,gemini,groq"
+  push:
+    branches:
+      - Work/ai-farm-audit
+
+permissions:
+  contents: read
+
+jobs:
+  connectivity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      AI_PROVIDERS: ${{ inputs.providers || 'xai,gemini,groq' }}
+      XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+      XAI_MODEL: ${{ secrets.XAI_MODEL || 'grok-4.6' }}
+      CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+      CLAUDE_MODEL: ${{ secrets.CLAUDE_MODEL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ secrets.GEMINI_MODEL || 'gemini-3.6-flash' }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GROQ_MODEL: ${{ secrets.GROQ_MODEL || 'llama-3.3-70b-versatile' }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      OPENROUTER_MODEL: ${{ secrets.OPENROUTER_MODEL }}
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v4
+        with:
+          ref: Work/ai-farm-audit
+          fetch-depth: 1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Test vector-only AI connectivity
+        run: bun run scripts/test-ai-providers.ts
+
+      - name: Upload AI connectivity report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-mesh-connectivity
+          path: |
+            ai-provider-connectivity.json
+            ai-provider-connectivity.md
+          if-no-files-found: error
