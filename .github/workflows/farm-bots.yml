@@ -3,6 +3,11 @@ name: Evolutionary Farm Bots
 on:
   workflow_dispatch:
     inputs:
+      start_five:
+        description: "Run the first 5 bots in PAPER_MODE"
+        required: true
+        type: boolean
+        default: false
       generations:
         description: "Generations per bot"
         required: false
@@ -27,14 +32,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  approval:
+    name: Admin approval — first 5 bots (paper mode)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.start_five == true }}
+    runs-on: ubuntu-latest
+    environment: farm-paper-approval
+    steps:
+      - name: Approval recorded
+        run: echo "Admin approval received; starting first five PAPER_MODE bots."
+
   bot:
     name: bot-${{ matrix.bot }}
+    needs: approval
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.start_five == true }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        bot: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        bot: [0, 1, 2, 3, 4]
 
     env:
       BOT_ID: ${{ matrix.bot }}
@@ -42,7 +58,7 @@ jobs:
       GENERATIONS: ${{ inputs.generations || '1' }}
       FARM_POPULATION: ${{ inputs.population || '10' }}
       OPPORTUNITIES_PER_GEN: ${{ inputs.opportunities || '200' }}
-      DEPLOYMENT_MODE: SIMULATION
+      DEPLOYMENT_MODE: PAPER_MODE
       MAX_DAILY_SPEND: 50000
       MAX_ACCEPTABLE_LOSS: 5000
       MIN_DIVERSITY: 0.4
