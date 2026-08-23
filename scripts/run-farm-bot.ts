@@ -8,6 +8,8 @@ const generations = Math.max(1, Number(process.env.GENERATIONS ?? "1"));
 const populationSize = Math.max(1, Number(process.env.FARM_POPULATION ?? "10"));
 const requestedMode = (process.env.DEPLOYMENT_MODE ?? "SIMULATION") as DeploymentMode;
 const mode: DeploymentMode = requestedMode === "PAPER_MODE" ? "PAPER_MODE" : "SIMULATION";
+const auditFrequency = Math.max(1, Number(process.env.AUTONOMY_AUDIT_FREQUENCY ?? String(DEFAULT_CONFIG.autonomyAuditFrequency)));
+const aiEnabled = process.env.FARM_AI_ENABLED === "true";
 
 const cfg = {
   ...DEFAULT_CONFIG,
@@ -23,6 +25,9 @@ const engine = new FarmEngine(cfg);
 async function main() {
   for (let i = 0; i < generations; i++) {
     const record = engine.step(NEUTRAL_MESH);
+    const shouldNudge = aiEnabled && (record.index % auditFrequency === 0);
+
+    if (!shouldNudge) continue;
 
     try {
       const nudge = await requestFarmNudge({
