@@ -1,0 +1,84 @@
+name: AI Mesh Full Stress
+
+on:
+  workflow_dispatch:
+    inputs:
+      rounds:
+        description: "Stress rounds"
+        required: false
+        default: "10"
+      nodes_per_provider:
+        description: "Nodes per provider"
+        required: false
+        default: "3"
+      concurrency:
+        description: "Parallel requests"
+        required: false
+        default: "4"
+      providers:
+        description: "Comma-separated providers"
+        required: false
+        default: "xai,groq,gemini,claude,openrouter"
+      max_output_tokens:
+        description: "Max output tokens per request"
+        required: false
+        default: "32"
+
+permissions:
+  contents: read
+
+jobs:
+  stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      STRESS_ROUNDS: ${{ inputs.rounds || '10' }}
+      NODES_PER_PROVIDER: ${{ inputs.nodes_per_provider || '3' }}
+      STRESS_CONCURRENCY: ${{ inputs.concurrency || '4' }}
+      AI_PROVIDERS: ${{ inputs.providers || 'xai,groq,gemini,claude,openrouter' }}
+      MAX_OUTPUT_TOKENS: ${{ inputs.max_output_tokens || '32' }}
+      XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+      XAI_MODEL: ${{ secrets.XAI_MODEL }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GROQ_MODEL: ${{ secrets.GROQ_MODEL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
+      CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+      CLAUDE_MODEL: ${{ secrets.CLAUDE_MODEL }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      OPENROUTER_MODEL: ${{ secrets.OPENROUTER_MODEL }}
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v4
+        with:
+          ref: Work/ai-farm-audit
+          fetch-depth: 1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
+
+      - name: Test
+        run: bun test
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Run full mesh stress
+        run: bun run scripts/stress-ai-mesh.ts
+
+      - name: Upload full stress report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-mesh-full-stress
+          path: |
+            ai-mesh-full-stress.json
+            ai-mesh-full-stress.md
+          if-no-files-found: error
