@@ -23,6 +23,11 @@ on:
         description: "Max output tokens per request"
         required: false
         default: "32"
+  push:
+    branches:
+      - Work/ai-farm-audit
+    paths:
+      - .github/workflows/ai-mesh-full-stress.yml
 
 permissions:
   contents: read
