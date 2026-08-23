@@ -161,6 +161,10 @@ export interface FarmConfig {
   mode: DeploymentMode;
   meshCoupling: boolean;
   seed: number;
+  autonomyMinimumConfidence: number;
+  autonomyRiskTolerance: number;
+  autonomyMaxParallelism: number;
+  autonomyAuditFrequency: number;
 }
 
 export const DEFAULT_CONFIG: FarmConfig = {
@@ -181,6 +185,10 @@ export const DEFAULT_CONFIG: FarmConfig = {
   mode: "SIMULATION",
   meshCoupling: true,
   seed: 42,
+  autonomyMinimumConfidence: 0.85,
+  autonomyRiskTolerance: 0.3,
+  autonomyMaxParallelism: 2,
+  autonomyAuditFrequency: 5,
 };
 
 export const NEUTRAL_MESH: MeshField = {
