@@ -55,7 +55,7 @@ jobs:
           bun run build
 
       - name: Tests
-        run: bun test
+        run: bun run test
 
       - name: Commit safe repairs
         run: |
