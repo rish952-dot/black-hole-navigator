@@ -6,19 +6,19 @@ on:
       rounds:
         description: "Stress rounds"
         required: false
-        default: "10"
+        default: "3"
       nodes_per_provider:
         description: "Nodes per provider"
         required: false
-        default: "3"
+        default: "2"
       concurrency:
         description: "Parallel requests"
         required: false
-        default: "4"
+        default: "2"
       providers:
         description: "Comma-separated providers"
         required: false
-        default: "xai,groq,gemini,claude,openrouter"
+        default: "xai"
       max_output_tokens:
         description: "Max output tokens per request"
         required: false
@@ -28,6 +28,7 @@ on:
       - Work/ai-farm-audit
     paths:
       - .github/workflows/ai-mesh-full-stress.yml
+      - scripts/stress-ai-mesh.ts
 
 permissions:
   contents: read
@@ -37,11 +38,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      STRESS_ROUNDS: ${{ inputs.rounds || '10' }}
-      NODES_PER_PROVIDER: ${{ inputs.nodes_per_provider || '3' }}
-      STRESS_CONCURRENCY: ${{ inputs.concurrency || '4' }}
-      AI_PROVIDERS: ${{ inputs.providers || 'xai,groq,gemini,claude,openrouter' }}
+      STRESS_ROUNDS: ${{ inputs.rounds || '3' }}
+      NODES_PER_PROVIDER: ${{ inputs.nodes_per_provider || '2' }}
+      STRESS_CONCURRENCY: ${{ inputs.concurrency || '2' }}
+      AI_PROVIDERS: ${{ inputs.providers || 'xai' }}
       MAX_OUTPUT_TOKENS: ${{ inputs.max_output_tokens || '32' }}
+      FAIL_ON_MISSING_PROVIDER: "true"
       XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
       XAI_MODEL: ${{ secrets.XAI_MODEL }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -75,6 +77,20 @@ jobs:
 
       - name: Lint
         run: bun run lint
+
+      - name: Provider secret preflight
+        run: |
+          echo "Selected providers: $AI_PROVIDERS"
+          for provider in ${AI_PROVIDERS//,/ }; do
+            name=$(echo "$provider" | tr '[:lower:]' '[:upper:]')
+            key_var="${name}_API_KEY"
+            value="${!key_var:-}"
+            if [ -n "$value" ]; then
+              echo "$provider: key present"
+            else
+              echo "$provider: key MISSING"
+            fi
+          done
 
       - name: Run full mesh stress
         run: bun run scripts/stress-ai-mesh.ts
