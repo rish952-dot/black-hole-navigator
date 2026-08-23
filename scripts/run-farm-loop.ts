@@ -2,18 +2,20 @@ import { FarmEngine } from "../src/farm/engine";
 import { requestFarmNudge } from "../src/farm/api";
 import { encodeVector, VectorBus } from "../src/farm/vector-bus";
 import { assessFarm } from "../src/farm/farm-supervisor";
+import { grossOpportunityScore, PROFIT_FIRST_CONFIG, roundRobin } from "../src/farm/optimization";
 import { DEFAULT_CONFIG, NEUTRAL_MESH } from "../src/farm/types";
 
 const bots = Math.max(1, Math.min(10, Number(process.env.BOT_COUNT ?? "5")));
-const rounds = Math.max(1, Math.min(25, Number(process.env.ROUNDS ?? "10")));
-const pop = Math.max(2, Math.min(30, Number(process.env.FARM_POPULATION ?? "10")));
-const ops = Math.max(50, Math.min(1000, Number(process.env.OPPORTUNITIES_PER_GEN ?? "200")));
+const rounds = Math.max(1, Math.min(25, Number(process.env.ROUNDS ?? "15")));
+const pop = Math.max(2, Math.min(30, Number(process.env.FARM_POPULATION ?? "20")));
+const ops = Math.max(100, Math.min(1500, Number(process.env.OPPORTUNITIES_PER_GEN ?? String(PROFIT_FIRST_CONFIG.opportunitiesPerGen))));
 const aiOn = process.env.FARM_AI_ENABLED === "true";
 const auditEvery = Math.max(1, Number(process.env.AUTONOMY_AUDIT_FREQUENCY ?? "5"));
 
-const bus = new VectorBus(2000);
+const bus = new VectorBus(4000);
 const engines = Array.from({ length: bots }, (_, botId) => new FarmEngine({
   ...DEFAULT_CONFIG,
+  ...PROFIT_FIRST_CONFIG,
   seed: 1000 + botId,
   populationSize: pop,
   opportunitiesPerGen: ops,
@@ -30,17 +32,23 @@ async function main() {
       const engine = engines[botId];
       const record = engine.step(NEUTRAL_MESH);
 
-      for (const agent of engine.agents) {
-        const best = engine.market.discoverTasks(3, engine.rng)[0];
-        if (!best) continue;
+      const ranked = engine.market
+        .discoverTasks(Math.min(60, Math.max(12, Math.floor(ops * 0.05))), engine.rng)
+        .sort((a, b) => grossOpportunityScore(b) - grossOpportunityScore(a));
+      const shares = roundRobin(ranked, Math.max(1, engine.agents.length));
+
+      engine.agents.forEach((agent, agentIndex) => {
+        const best = shares[agentIndex]?.[0] ?? ranked[0];
+        if (!best) return;
         const vector = encodeVector(agent, best, record.index, agent.stats.netProfit, agent.stats.successRate);
         bus.publish(vector);
-      }
+      });
 
-      const peer = bus.receive(record.index).slice(0, 8);
+      const peer = bus.receive(record.index).slice(0, 12);
       for (const v of peer) {
         if (v.sender === botId) continue;
-        engine.cfg.explorationRate = Math.max(0, Math.min(1, engine.cfg.explorationRate + (v.novelty - 0.5) * 0.01));
+        const pressure = (v.novelty - 0.5) * 0.01 + Math.max(-0.01, Math.min(0.01, v.expectedValue / 100000));
+        engine.cfg.explorationRate = Math.max(0, Math.min(1, engine.cfg.explorationRate + pressure));
       }
 
       if (aiOn && record.index % auditEvery === 0) {
@@ -87,6 +95,7 @@ async function main() {
     rounds,
     population: pop,
     opportunities: ops,
+    fitness: "net_profit",
     mode: "PAPER_MODE",
     vectorMessages: bus.size,
     results: out,
