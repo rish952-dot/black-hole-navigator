@@ -1,0 +1,45 @@
+name: xAI Mesh Connectivity Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - Work/ai-farm-audit
+
+permissions:
+  contents: read
+
+jobs:
+  test-xai:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+      XAI_BASE_URL: https://api.x.ai
+      XAI_MODEL: ${{ secrets.XAI_MODEL }}
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v4
+        with:
+          ref: Work/ai-farm-audit
+          fetch-depth: 1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Run 2-node vector-only xAI test
+        run: bun run scripts/test-xai-mesh.ts
+
+      - name: Upload xAI mesh test
+        uses: actions/upload-artifact@v4
+        with:
+          name: xai-mesh-test
+          path: |
+            xai-mesh-test.json
+            xai-mesh-test.md
+          if-no-files-found: error
