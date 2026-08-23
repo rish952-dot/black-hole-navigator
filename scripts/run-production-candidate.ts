@@ -71,6 +71,7 @@ async function main() {
     opportunityCount: ops.length,
     vectorMessages: bus.size,
     aggregateProfit,
+    results,
     ranked,
     timestamp: new Date().toISOString(),
     settlement: "approval-only",
