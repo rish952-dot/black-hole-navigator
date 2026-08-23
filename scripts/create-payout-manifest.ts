@@ -4,7 +4,7 @@ const address = (process.env.PAYOUT_ADDRESS ?? "").trim();
 const chain = (process.env.PAYOUT_CHAIN ?? "ethereum").trim().toLowerCase();
 const botCount = Math.max(0, Number(process.env.BOT_COUNT ?? "5"));
 
-if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
+if (address && !/^0x[a-fA-F0-9]{40}$/.test(address)) {
   console.error("Invalid PAYOUT_ADDRESS. Expected a 20-byte EVM address such as 0x....");
   process.exit(1);
 }
@@ -25,7 +25,6 @@ for (const file of files) {
     totalNetProfit += Number(result.netProfit ?? 0);
     bots.push(result);
   } catch {
-    // Missing bot artifacts are recorded rather than silently treated as zero.
     bots.push({ file, missing: true });
   }
 }
@@ -33,15 +32,17 @@ for (const file of files) {
 await mkdir("farm-output", { recursive: true });
 
 const manifest = {
-  status: "PAPER_ONLY",
+  status: address ? "PAPER_ONLY" : "PAPER_ONLY_NO_DESTINATION",
   chain,
-  payoutAddress: address,
+  payoutAddress: address || null,
   totalPaperNetProfit: Number(totalNetProfit.toFixed(2)),
   botCount,
   bots,
   transfer: {
     enabled: false,
-    reason: "This repository does not sign or submit blockchain transactions. The manifest is a bookkeeping/output destination only.",
+    reason: address
+      ? "This repository does not sign or submit blockchain transactions. The manifest is a bookkeeping/output destination only."
+      : "No payout address was supplied; no destination was recorded.",
   },
   createdAt: new Date().toISOString(),
 };
