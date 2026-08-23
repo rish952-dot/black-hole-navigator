@@ -20,6 +20,10 @@ on:
         description: "Synthetic opportunities per generation"
         required: false
         default: "200"
+      payout_address:
+        description: "Public EVM address for the paper payout report"
+        required: false
+        default: ""
   push:
     branches:
       - Work/ai-farm-audit
@@ -97,4 +101,59 @@ jobs:
         with:
           name: farm-bot-${{ matrix.bot }}
           path: farm-bot-${{ matrix.bot }}.json
+          if-no-files-found: error
+
+  supervisor:
+    name: Farm supervisor
+    needs: bot
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.start_five == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BOT_COUNT: 5
+      MAX_ACCEPTABLE_LOSS: 5000
+      MIN_DIVERSITY: 0.4
+      FLAG_THRESHOLD: 2
+      MAX_VOLATILITY: 0.8
+      PAYOUT_ADDRESS: ${{ inputs.payout_address }}
+      PAYOUT_CHAIN: ethereum
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v4
+        with:
+          ref: Work/ai-farm-audit
+          fetch-depth: 1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Download bot results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: farm-bot-*
+          path: bot-artifacts
+          merge-multiple: true
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Supervise all bots
+        run: |
+          cp bot-artifacts/farm-bot-*.json .
+          bun run scripts/supervise-farm.ts
+
+      - name: Build paper payout manifest
+        if: always()
+        run: bun run scripts/create-payout-manifest.ts
+
+      - name: Upload supervisor outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: farm-supervisor
+          path: |
+            farm-supervisor.json
+            farm-output/payout-manifest.json
           if-no-files-found: error
