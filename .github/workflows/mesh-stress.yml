@@ -15,6 +15,10 @@ on:
         description: "Real AI nodes"
         required: false
         default: "10"
+      ai_provider:
+        description: "AI provider (claude or openai-compatible)"
+        required: false
+        default: "claude"
   push:
     branches:
       - Work/ai-farm-audit
@@ -33,7 +37,11 @@ jobs:
       VECTORS_PER_NODE: 2
       MESH_BUS_CAPACITY: 10000
       AI_CONCURRENCY: 4
-      FARM_AI_ENABLED: ${{ secrets.FARM_AI_API_KEY != '' && 'true' || 'false' }}
+      FARM_AI_PROVIDER: ${{ inputs.ai_provider || 'claude' }}
+      FARM_AI_ENABLED: ${{ secrets.CLAUDE_API_KEY != '' || secrets.FARM_AI_API_KEY != '' && 'true' || 'false' }}
+      CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+      CLAUDE_MODEL: ${{ secrets.CLAUDE_MODEL }}
+      CLAUDE_BASE_URL: ${{ secrets.CLAUDE_BASE_URL }}
       FARM_AI_API_KEY: ${{ secrets.FARM_AI_API_KEY }}
       FARM_AI_BASE_URL: ${{ secrets.FARM_AI_BASE_URL }}
       FARM_AI_MODEL: ${{ secrets.FARM_AI_MODEL }}
