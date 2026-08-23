@@ -1,4 +1,5 @@
 import { MODEL_COST, MODEL_SKILL } from "./genome";
+import { getAutonomyConfig } from "./autonomy-config";
 import type { Agent, FarmConfig, Opportunity, TaskRecord } from "./types";
 import { RNG } from "./rng";
 
@@ -19,7 +20,9 @@ export interface Evaluation {
 export function successProbability(a: Agent, op: Opportunity): number {
   const g = a.genome;
   const skill = MODEL_SKILL[g.model] ?? 0.8;
-  const toolMatch = op.requiredTools.filter((t) => g.toolPreferences.includes(t)).length / op.requiredTools.length;
+  const toolMatch = op.requiredTools.length === 0
+    ? 1
+    : op.requiredTools.filter((t) => g.toolPreferences.includes(t)).length / op.requiredTools.length;
   const timeFit = g.maximumTaskDuration >= op.durationMin ? 1 : 0.5;
   const verification = 0.85 + g.verificationLevel * 0.2;
   const research = 0.85 + g.researchDepth * 0.2;
@@ -27,6 +30,57 @@ export function successProbability(a: Agent, op: Opportunity): number {
   const spread = 1 - Math.max(0, g.parallelism - 4) * 0.06;
   const p = op.baseSuccessProb * skill * (0.55 + 0.45 * toolMatch) * timeFit * verification * research * overheat * spread;
   return Math.min(0.985, Math.max(0.02, p));
+}
+
+export interface AutonomyDecision {
+  proceed: boolean;
+  reason?: string;
+}
+
+/**
+ * Applies the bounded autonomy policy before an accepted task can execute.
+ * LIMITED_REAL/FULL_REAL are deliberately blocked by the simulation runner;
+ * this function is a gate, not a real-world execution connector.
+ */
+export function canProceedAutonomously(
+  agent: Agent,
+  opportunity: Opportunity,
+  cfg: FarmConfig,
+  botId = 0,
+): AutonomyDecision {
+  if (cfg.mode === "DRY_RUN") return { proceed: false, reason: "dry-run mode" };
+  if (cfg.mode === "LIMITED_REAL" || cfg.mode === "FULL_REAL") {
+    return { proceed: false, reason: `${cfg.mode} is disabled in the simulation runner` };
+  }
+
+  const policy = getAutonomyConfig(botId);
+  if (!policy.allowedCategories.includes(opportunity.category)) {
+    return { proceed: false, reason: `category ${opportunity.category} not whitelisted` };
+  }
+
+  const p = successProbability(agent, opportunity);
+  const minimumConfidence = Math.max(cfg.autonomyMinimumConfidence, policy.minSuccessProbability);
+  if (p < minimumConfidence) {
+    return { proceed: false, reason: `success probability ${p.toFixed(2)} below ${minimumConfidence.toFixed(2)}` };
+  }
+
+  if (agent.genome.riskTolerance > Math.min(cfg.autonomyRiskTolerance, 0.3)) {
+    return { proceed: false, reason: "genome risk tolerance exceeds autonomy cap" };
+  }
+
+  if (agent.genome.parallelism > Math.min(cfg.autonomyMaxParallelism, policy.maxParallelism)) {
+    return { proceed: false, reason: "parallelism exceeds autonomy cap" };
+  }
+
+  if (opportunity.computeCost > policy.maxCompute) {
+    return { proceed: false, reason: "compute cost exceeds autonomy cap" };
+  }
+
+  if (opportunity.computeCost > agent.capital * 0.1) {
+    return { proceed: false, reason: "task cost exceeds 10% of agent capital" };
+  }
+
+  return { proceed: true };
 }
 
 export function evaluate(a: Agent, op: Opportunity, cfg: FarmConfig): Evaluation {
@@ -106,7 +160,6 @@ export function execute(a: Agent, op: Opportunity, ev: Evaluation, cfg: FarmConf
 
   const compute = +(ev.expectedComputeCost * attempts * rng.range(0.85, 1.25)).toFixed(2);
   const fee = success ? ev.transactionCost : 0;
-  // Rejection by the marketplace even after "success" — verification matters.
   const rejected = success && rng.chance(0.06 * (1 - g.verificationLevel));
   const paid = success && !rejected;
   const payout = paid
