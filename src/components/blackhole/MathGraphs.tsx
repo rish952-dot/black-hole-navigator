@@ -19,13 +19,16 @@ interface Props {
   haloScale: number;
 }
 
-/**
- * Live mathematical model graphs:
- *  - Effective potential V_eff(r) for null + timelike geodesics
- *  - Disk temperature T(r) (Shakura-Sunyaev)
- *  - Gravitational redshift √(1 - r_s/r)
- *  - NFW dark matter enclosed mass M_DM(r)
- */
+type GraphPoint = {
+  r: number;
+  Veff: number;
+  T: number;
+  redshift: number;
+  DM: number;
+};
+
+type ChartKey = keyof GraphPoint;
+
 export function MathGraphs({
   mass,
   spin,
@@ -36,23 +39,15 @@ export function MathGraphs({
 }: Props) {
   const r_s = 2 * mass;
 
-  const data = useMemo(() => {
-    const arr: Array<{
-      r: number;
-      Veff: number;
-      T: number;
-      redshift: number;
-      DM: number;
-    }> = [];
+  const data = useMemo<GraphPoint[]>(() => {
+    const arr: GraphPoint[] = [];
     const r_in = diskInner * r_s;
     const rh = haloScale * r_s;
     for (let i = 0; i < 120; i++) {
       const r = r_s * 1.05 + (i / 119) * (diskOuter * r_s * 1.5);
-      // V_eff for circular timelike orbits (L per ISCO scale)
-      const L = 4 * mass; // representative angular momentum
+      const L = 4 * mass;
       const Veff =
-        (1 - r_s / r) * (1 + (L * L) / (r * r)) - 1; // shifted for plotting
-      // Shakura-Sunyaev T(r) with inner-edge cutoff (arb units)
+        (1 - r_s / r) * (1 + (L * L) / (r * r)) - 1;
       const cutoff = r > r_in ? 1 - Math.sqrt(r_in / r) : 0;
       const T = Math.pow(r / r_s, -0.75) * Math.max(cutoff, 0) * 100;
       const redshift = r > r_s ? Math.sqrt(1 - r_s / r) : 0;
@@ -71,34 +66,10 @@ export function MathGraphs({
 
   return (
     <div className="space-y-4">
-      <Chart
-        title="V_eff(r) — Geodesic effective potential"
-        subtitle="Schwarzschild + dark-matter halo"
-        data={data}
-        keys={[
-          { key: "Veff", color: "hsl(var(--primary))", name: "V_eff" },
-        ]}
-      />
-      <Chart
-        title="T(r) — Disk temperature (Shakura-Sunyaev)"
-        subtitle={`Inner edge ${diskInner.toFixed(1)} r_s`}
-        data={data}
-        keys={[{ key: "T", color: "hsl(var(--accent))", name: "T(r) ∝ r^-3/4" }]}
-      />
-      <Chart
-        title="z(r) — Gravitational redshift"
-        subtitle="√(1 - r_s/r)"
-        data={data}
-        keys={[
-          { key: "redshift", color: "hsl(var(--secondary))", name: "shift" },
-        ]}
-      />
-      <Chart
-        title="M_DM(r) — NFW enclosed dark matter"
-        subtitle={`ρ ∝ 1/[(r/r_s)(1+r/r_s)²]  ·  spin a/M=${spin.toFixed(2)}`}
-        data={data}
-        keys={[{ key: "DM", color: "hsl(280 80% 70%)", name: "M_DM" }]}
-      />
+      <Chart title="V_eff(r) — Geodesic effective potential" subtitle="Schwarzschild + dark-matter halo" data={data} keys={[{ key: "Veff", color: "hsl(var(--primary))", name: "V_eff" }]} />
+      <Chart title="T(r) — Disk temperature (Shakura-Sunyaev)" subtitle={`Inner edge ${diskInner.toFixed(1)} r_s`} data={data} keys={[{ key: "T", color: "hsl(var(--accent))", name: "T(r) ∝ r^-3/4" }]} />
+      <Chart title="z(r) — Gravitational redshift" subtitle="√(1 - r_s/r)" data={data} keys={[{ key: "redshift", color: "hsl(var(--secondary))", name: "shift" }]} />
+      <Chart title="M_DM(r) — NFW enclosed dark matter" subtitle={`ρ ∝ 1/[(r/r_s)(1+r/r_s)²]  ·  spin a/M=${spin.toFixed(2)}`} data={data} keys={[{ key: "DM", color: "hsl(280 80% 70%)", name: "M_DM" }]} />
     </div>
   );
 }
@@ -111,57 +82,25 @@ function Chart({
 }: {
   title: string;
   subtitle?: string;
-  data: any[];
-  keys: { key: string; color: string; name: string }[];
+  data: GraphPoint[];
+  keys: { key: ChartKey; color: string; name: string }[];
 }) {
   return (
     <div className="rounded-md border border-border bg-card/40 p-3">
       <div className="mb-2">
-        <div className="font-mono text-[11px] uppercase tracking-widest text-primary">
-          {title}
-        </div>
-        {subtitle && (
-          <div className="font-mono text-[9px] text-muted-foreground">
-            {subtitle}
-          </div>
-        )}
+        <div className="font-mono text-[11px] uppercase tracking-widest text-primary">{title}</div>
+        {subtitle && <div className="font-mono text-[9px] text-muted-foreground">{subtitle}</div>}
       </div>
       <div className="h-[140px]">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 5, right: 8, left: -20, bottom: 0 }}>
             <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="2 4" />
-            <XAxis
-              dataKey="r"
-              tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
-              label={{
-                value: "r / r_s",
-                fontSize: 9,
-                fill: "hsl(var(--muted-foreground))",
-                position: "insideBottom",
-                offset: -2,
-              }}
-            />
+            <XAxis dataKey="r" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} label={{ value: "r / r_s", fontSize: 9, fill: "hsl(var(--muted-foreground))", position: "insideBottom", offset: -2 }} />
             <YAxis tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} />
-            <Tooltip
-              contentStyle={{
-                background: "hsl(var(--popover))",
-                border: "1px solid hsl(var(--border))",
-                fontSize: 10,
-                fontFamily: "monospace",
-              }}
-            />
+            <Tooltip contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", fontSize: 10, fontFamily: "monospace" }} />
             <Legend wrapperStyle={{ fontSize: 9, fontFamily: "monospace" }} />
             {keys.map((k) => (
-              <Line
-                key={k.key}
-                type="monotone"
-                dataKey={k.key}
-                stroke={k.color}
-                strokeWidth={1.6}
-                dot={false}
-                name={k.name}
-                isAnimationActive={false}
-              />
+              <Line key={k.key} type="monotone" dataKey={k.key} stroke={k.color} strokeWidth={1.6} dot={false} name={k.name} isAnimationActive={false} />
             ))}
           </LineChart>
         </ResponsiveContainer>
