@@ -22,12 +22,10 @@ export interface FarmApiInput {
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
-/**
- * Optional, low-frequency AI strategy adapter.
- * It never decides economic fitness; it only nudges exploration parameters.
- * Disabled unless FARM_AI_API_KEY, FARM_AI_BASE_URL and FARM_AI_MODEL are set.
- */
+/** Optional low-frequency AI strategy adapter. Explicitly disabled by default. */
 export async function requestFarmNudge(input: FarmApiInput): Promise<FarmApiNudge | null> {
+  if (process.env.FARM_AI_ENABLED !== "true") return null;
+
   const apiKey = process.env.FARM_AI_API_KEY;
   const baseUrl = process.env.FARM_AI_BASE_URL;
   const model = process.env.FARM_AI_MODEL;
