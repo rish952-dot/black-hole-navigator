@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       providers:
-        description: "Comma-separated providers: xai,claude,gemini,groq,openrouter"
+        description: "Comma-separated providers: xai,gemini,groq,claude,openrouter"
         required: false
-        default: "xai,claude,gemini,groq,openrouter"
+        default: "xai,gemini,groq"
   push:
     branches:
       - Work/ai-farm-audit
@@ -19,15 +19,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      AI_PROVIDERS: ${{ inputs.providers || 'xai,claude,gemini,groq,openrouter' }}
+      AI_PROVIDERS: ${{ inputs.providers || 'xai,gemini,groq' }}
       XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
-      XAI_MODEL: ${{ secrets.XAI_MODEL }}
+      XAI_MODEL: ${{ secrets.XAI_MODEL || 'grok-4.6' }}
       CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
       CLAUDE_MODEL: ${{ secrets.CLAUDE_MODEL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
+      GEMINI_MODEL: ${{ secrets.GEMINI_MODEL || 'gemini-2.0-flash' }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-      GROQ_MODEL: ${{ secrets.GROQ_MODEL }}
+      GROQ_MODEL: ${{ secrets.GROQ_MODEL || 'llama-3.3-70b-versatile' }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       OPENROUTER_MODEL: ${{ secrets.OPENROUTER_MODEL }}
     steps:
