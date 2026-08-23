@@ -11,6 +11,13 @@ on:
         description: "Bots"
         required: false
         default: "5"
+  push:
+    branches:
+      - Work/ai-farm-audit
+    paths:
+      - "src/farm/**"
+      - "scripts/run-farm-loop.ts"
+      - ".github/workflows/farm-loop.yml"
   schedule:
     - cron: "17 * * * *"
 
