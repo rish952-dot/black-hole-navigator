@@ -15,7 +15,7 @@ type Result = {
   error?: string;
 };
 
-const requested = (process.env.AI_PROVIDERS ?? "xai,claude,gemini,groq,openrouter")
+const requested = (process.env.AI_PROVIDERS ?? "xai,gemini,groq")
   .split(",")
   .map((x) => x.trim().toLowerCase())
   .filter(Boolean);
@@ -101,13 +101,13 @@ async function testClaude(): Promise<Result> {
 
 async function testGemini(): Promise<Result> {
   const apiKey = process.env.GEMINI_API_KEY;
-  const model = process.env.GEMINI_MODEL;
-  if (!apiKey || !model) return { provider: "gemini", status: "SKIPPED", error: "missing GEMINI_API_KEY or GEMINI_MODEL" };
+  const model = process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
+  if (!apiKey) return { provider: "gemini", status: "SKIPPED", error: "missing GEMINI_API_KEY" };
   const started = performance.now();
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ parts: [{ text: compact }] }], generationConfig: { temperature: 0, maxOutputTokens: 48, responseMimeType: "application/json" } }),
   });
   const elapsedMs = +(performance.now() - started).toFixed(1);
