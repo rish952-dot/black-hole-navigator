@@ -53,6 +53,19 @@ async function main() {
   const latest = snapshot.generations.at(-1);
   const flagged = snapshot.agents.reduce((sum, agent) => sum + agent.stats.flagged.length, 0);
   const maxVolatility = Math.max(0, ...snapshot.agents.map((agent) => agent.stats.volatility));
+  const agentEarnings = snapshot.agents.map((agent) => ({
+    agentId: agent.id,
+    botId,
+    grossRevenue: agent.stats.revenue,
+    computeCost: agent.stats.costs,
+    otherCost: 0,
+    netProfit: agent.stats.netProfit,
+    roi: agent.stats.roi,
+    tasksCompleted: agent.stats.tasksSucceeded,
+    fitness: agent.stats.fitness,
+    status: agent.status,
+  }));
+
   const result = {
     botId,
     seed,
@@ -70,6 +83,7 @@ async function main() {
     flagged,
     maxVolatility,
     halted: snapshot.halted,
+    agentEarnings,
     timestamp: new Date().toISOString(),
   };
 
