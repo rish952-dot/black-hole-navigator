@@ -36,10 +36,10 @@ const taskCost = 1;
 
 const defaults: Record<string, string> = {
   xai: "grok-4.6",
-  groq: "llama-3.3-70b-versatile",
-  gemini: "gemini-2.0-flash",
+  groq: "openai/gpt-oss-20b",
+  gemini: "gemini-2.5-flash-lite",
   claude: "claude-3-5-haiku-latest",
-  openrouter: "",
+  openrouter: "openrouter/free",
 };
 
 const keyFor = (provider: string) => ({
@@ -121,10 +121,11 @@ async function callProvider(provider: string): Promise<{ status: "PASS" | "FAIL"
     }
 
     if (provider === "claude") {
-      response = await fetch("https://api.anthropic.com/v1/messages", {
+      const endpoint = `${aiBaseUrl.replace(/\/$/, "")}/v1/messages`;
+      const response = await fetch(endpoint, {
         method: "POST",
-        headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-        body: JSON.stringify({ model, max_tokens: maxOutputTokens, temperature: 0, system, messages: [{ role: "user", content: compact }] }),
+        headers: { "x-api-key": aiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        body: JSON.stringify({ model: aiModel, max_tokens: maxOutputTokens, temperature: 0, system, messages: [{ role: "user", content: compact }] }),
       });
       const latency = +(performance.now() - started).toFixed(1);
       if (!response.ok) return { status: "FAIL", model, latency, httpStatus: response.status, error: await bodyText(response) };
