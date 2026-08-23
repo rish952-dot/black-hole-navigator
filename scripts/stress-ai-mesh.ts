@@ -121,11 +121,10 @@ async function callProvider(provider: string): Promise<{ status: "PASS" | "FAIL"
     }
 
     if (provider === "claude") {
-      const endpoint = `${aiBaseUrl.replace(/\/$/, "")}/v1/messages`;
-      const response = await fetch(endpoint, {
+      response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "x-api-key": aiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-        body: JSON.stringify({ model: aiModel, max_tokens: maxOutputTokens, temperature: 0, system, messages: [{ role: "user", content: compact }] }),
+        headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        body: JSON.stringify({ model, max_tokens: maxOutputTokens, temperature: 0, system, messages: [{ role: "user", content: compact }] }),
       });
       const latency = +(performance.now() - started).toFixed(1);
       if (!response.ok) return { status: "FAIL", model, latency, httpStatus: response.status, error: await bodyText(response) };
