@@ -42,6 +42,14 @@ jobs:
       GENERATIONS: ${{ inputs.generations || '1' }}
       FARM_POPULATION: ${{ inputs.population || '10' }}
       OPPORTUNITIES_PER_GEN: ${{ inputs.opportunities || '200' }}
+      DEPLOYMENT_MODE: SIMULATION
+      MAX_DAILY_SPEND: 50000
+      MAX_ACCEPTABLE_LOSS: 5000
+      MIN_DIVERSITY: 0.4
+      FLAG_THRESHOLD: 2
+      MAX_VOLATILITY: 0.8
+      AUTONOMY_AUDIT_FREQUENCY: 5
+      FARM_AI_ENABLED: false
       FARM_AI_API_KEY: ${{ secrets.FARM_AI_API_KEY }}
       FARM_AI_BASE_URL: ${{ secrets.FARM_AI_BASE_URL }}
       FARM_AI_MODEL: ${{ secrets.FARM_AI_MODEL }}
@@ -64,7 +72,11 @@ jobs:
       - name: Run bot
         run: bun run scripts/run-farm-bot.ts
 
+      - name: Validate safety gates
+        run: bun run scripts/validate-farm-safety.ts farm-bot-${{ matrix.bot }}.json
+
       - name: Upload bot result
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: farm-bot-${{ matrix.bot }}
