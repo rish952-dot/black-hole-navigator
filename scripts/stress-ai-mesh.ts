@@ -21,15 +21,11 @@ type ProviderResult = {
   error?: string;
 };
 
-type PaperAccount = {
-  balance: number;
-  reserved: number;
-  earned: number;
-  spent: number;
-  tasks: number;
-};
+type PaperAccount = { balance: number; reserved: number; earned: number; spent: number; tasks: number };
 
-const providers = (process.env.AI_PROVIDERS ?? "xai,groq,gemini,claude,openrouter")
+type SecretStatus = { key: boolean; model: boolean; ready: boolean; defaultModel: string };
+
+const providers = (process.env.AI_PROVIDERS ?? "xai")
   .split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
 const rounds = Math.max(1, Math.min(20, Number(process.env.STRESS_ROUNDS ?? "10")));
 const nodesPerProvider = Math.max(1, Math.min(8, Number(process.env.NODES_PER_PROVIDER ?? "3")));
@@ -37,6 +33,44 @@ const concurrency = Math.max(1, Math.min(12, Number(process.env.STRESS_CONCURREN
 const maxOutputTokens = Math.max(16, Math.min(64, Number(process.env.MAX_OUTPUT_TOKENS ?? "32")));
 const taskValue = 5;
 const taskCost = 1;
+
+const defaults: Record<string, string> = {
+  xai: "grok-4.6",
+  groq: "llama-3.3-70b-versatile",
+  gemini: "gemini-2.0-flash",
+  claude: "claude-3-5-haiku-latest",
+  openrouter: "",
+};
+
+const keyFor = (provider: string) => ({
+  xai: process.env.XAI_API_KEY,
+  groq: process.env.GROQ_API_KEY,
+  gemini: process.env.GEMINI_API_KEY,
+  claude: process.env.CLAUDE_API_KEY,
+  openrouter: process.env.OPENROUTER_API_KEY,
+}[provider]);
+
+const modelFor = (provider: string) => ({
+  xai: process.env.XAI_MODEL,
+  groq: process.env.GROQ_MODEL,
+  gemini: process.env.GEMINI_MODEL,
+  claude: process.env.CLAUDE_MODEL,
+  openrouter: process.env.OPENROUTER_MODEL,
+}[provider] || defaults[provider] || "");
+
+const secretStatus: Record<string, SecretStatus> = Object.fromEntries(
+  providers.map((provider) => {
+    const key = Boolean(keyFor(provider));
+    const defaultModel = defaults[provider] ?? "";
+    const model = Boolean(modelFor(provider));
+    return [provider, { key, model, ready: key && model, defaultModel }];
+  }),
+);
+
+const missing = providers.filter((provider) => !secretStatus[provider]?.ready);
+if (process.env.FAIL_ON_MISSING_PROVIDER === "true" && missing.length) {
+  throw new Error(`Missing provider credentials/config: ${missing.map((p) => `${p}(key=${secretStatus[p].key},model=${secretStatus[p].model})`).join(", ")}`);
+}
 
 const system = "Vector node only. Return ONLY JSON {confidence,novelty,urgency,strategy}. Numbers 0..1. strategy exactly 5 numbers. No prose.";
 const compact = JSON.stringify({ n: 1, g: 0, o: "stress", s: [0.45,0.6,0.5,0.25,0.4], c: 0.55, e: 4, cost: 1, nov: 0.6, urg: 0.4 });
@@ -59,27 +93,23 @@ async function bodyText(response: Response): Promise<string> {
 }
 
 function vectorScore(v: Vector): number {
-  const strategyMean = v.strategy.reduce((a,b) => a + b, 0) / v.strategy.length;
+  const strategyMean = v.strategy.reduce((a, b) => a + b, 0) / v.strategy.length;
   return (v.confidence * 0.45) + (v.novelty * 0.2) + (v.urgency * 0.15) + (strategyMean * 0.2);
 }
 
 async function callProvider(provider: string): Promise<{ status: "PASS" | "FAIL" | "SKIPPED"; model?: string; latency: number; httpStatus?: number; vector?: Vector; promptTokens?: number; outputTokens?: number; totalTokens?: number; error?: string }> {
   const started = performance.now();
-  let response: Response;
-  let model = "";
+  const model = modelFor(provider);
+  const key = keyFor(provider);
+  if (!key || !model) return { status: "SKIPPED", model, latency: 0, error: `provider not configured (key=${Boolean(key)}, model=${Boolean(model)})` };
 
   try {
+    let response: Response;
     if (provider === "xai" || provider === "groq" || provider === "openrouter") {
-      const cfg = provider === "xai"
-        ? { key: process.env.XAI_API_KEY, base: "https://api.x.ai/v1", model: process.env.XAI_MODEL ?? "grok-4.6" }
-        : provider === "groq"
-          ? { key: process.env.GROQ_API_KEY, base: "https://api.groq.com/openai/v1", model: process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile" }
-          : { key: process.env.OPENROUTER_API_KEY, base: "https://openrouter.ai/api/v1", model: process.env.OPENROUTER_MODEL ?? "" };
-      model = cfg.model;
-      if (!cfg.key || !model) return { status: "SKIPPED", model, latency: 0, error: "missing key/model" };
-      response = await fetch(`${cfg.base}/chat/completions`, {
+      const base = provider === "xai" ? "https://api.x.ai/v1" : provider === "groq" ? "https://api.groq.com/openai/v1" : "https://openrouter.ai/api/v1";
+      response = await fetch(`${base}/chat/completions`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${cfg.key}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
         body: JSON.stringify({ model, temperature: 0, max_tokens: maxOutputTokens, messages: [{ role: "system", content: system }, { role: "user", content: compact }] }),
       });
       const latency = +(performance.now() - started).toFixed(1);
@@ -90,10 +120,7 @@ async function callProvider(provider: string): Promise<{ status: "PASS" | "FAIL"
       return { status: "PASS", model, latency, httpStatus: response.status, vector: parseVector(raw), promptTokens: body.usage?.prompt_tokens ?? 0, outputTokens: body.usage?.completion_tokens ?? 0, totalTokens: body.usage?.total_tokens ?? 0 };
     }
 
-    if (provider === "claude" || provider === "anthropic") {
-      const key = process.env.CLAUDE_API_KEY;
-      model = process.env.CLAUDE_MODEL ?? "";
-      if (!key || !model) return { status: "SKIPPED", model, latency: 0, error: "missing key/model" };
+    if (provider === "claude") {
       response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
@@ -110,9 +137,6 @@ async function callProvider(provider: string): Promise<{ status: "PASS" | "FAIL"
     }
 
     if (provider === "gemini") {
-      const key = process.env.GEMINI_API_KEY;
-      model = process.env.GEMINI_MODEL ?? "";
-      if (!key || !model) return { status: "SKIPPED", model, latency: 0, error: "missing key/model" };
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
       response = await fetch(url, {
         method: "POST",
@@ -127,7 +151,7 @@ async function callProvider(provider: string): Promise<{ status: "PASS" | "FAIL"
       return { status: "PASS", model, latency, httpStatus: response.status, vector: parseVector(raw), promptTokens: body.usageMetadata?.promptTokenCount ?? 0, outputTokens: body.usageMetadata?.candidatesTokenCount ?? 0, totalTokens: body.usageMetadata?.totalTokenCount ?? 0 };
     }
 
-    return { status: "SKIPPED", latency: 0, error: "unsupported provider" };
+    return { status: "SKIPPED", model, latency: 0, error: "unsupported provider" };
   } catch (error) {
     return { status: "FAIL", model, latency: +(performance.now() - started).toFixed(1), error: error instanceof Error ? error.message : String(error) };
   }
@@ -154,18 +178,13 @@ for (const provider of providers) {
     r.attempts++;
     const out = await callProvider(provider);
     if (out.status === "PASS") {
-      r.success++;
-      r.status = "PASS";
+      r.success++; r.status = "PASS";
       if (out.vector) r.vectors.push(out.vector);
       if (out.latency) r.latencyMs.push(out.latency);
       if (out.httpStatus) r.httpStatus.push(out.httpStatus);
-      r.promptTokens += out.promptTokens ?? 0;
-      r.outputTokens += out.outputTokens ?? 0;
-      r.totalTokens += out.totalTokens ?? 0;
+      r.promptTokens += out.promptTokens ?? 0; r.outputTokens += out.outputTokens ?? 0; r.totalTokens += out.totalTokens ?? 0;
     } else if (out.status === "FAIL") {
-      r.failures++;
-      r.status = "FAIL";
-      r.error = out.error;
+      r.failures++; r.status = "FAIL"; r.error = out.error;
       if (out.latency) r.latencyMs.push(out.latency);
       if (out.httpStatus) r.httpStatus.push(out.httpStatus);
     }
@@ -174,22 +193,21 @@ for (const provider of providers) {
 
 const latencyStats = (xs: number[]) => {
   if (!xs.length) return { min: 0, p50: 0, p95: 0, max: 0, avg: 0 };
-  const sorted = [...xs].sort((a,b) => a-b);
+  const sorted = [...xs].sort((a, b) => a - b);
   const pct = (p: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
-  return { min: sorted[0], p50: pct(0.5), p95: pct(0.95), max: sorted[sorted.length-1], avg: +(sorted.reduce((a,b)=>a+b,0)/sorted.length).toFixed(1) };
+  return { min: sorted[0], p50: pct(0.5), p95: pct(0.95), max: sorted.at(-1) ?? 0, avg: +(sorted.reduce((a, b) => a + b, 0) / sorted.length).toFixed(1) };
 };
 
 const allVectors = [...results.values()].flatMap((r) => r.vectors.map((v) => ({ provider: r.provider, score: vectorScore(v), vector: v })));
-const top = allVectors.sort((a,b) => b.score-a.score).slice(0, 10);
-const scoreMean = allVectors.length ? +(allVectors.reduce((a,b)=>a+b.score,0)/allVectors.length).toFixed(4) : 0;
+const top = allVectors.sort((a, b) => b.score - a.score).slice(0, 10);
+const scoreMean = allVectors.length ? +(allVectors.reduce((a, b) => a + b.score, 0) / allVectors.length).toFixed(4) : 0;
 
 const paper: Record<string, PaperAccount> = {};
 for (const provider of providers) paper[provider] = { balance: 100, reserved: 0, earned: 0, spent: 0, tasks: 0 };
 for (const item of allVectors) {
   const account = paper[item.provider];
   if (!account) continue;
-  account.reserved += taskCost;
-  account.spent += taskCost;
+  account.reserved += taskCost; account.spent += taskCost;
   if (item.score >= 0.55) { account.earned += taskValue; account.balance += taskValue - taskCost; account.tasks++; }
   account.reserved = Math.max(0, account.reserved - taskCost);
 }
@@ -198,44 +216,25 @@ const report = {
   status: "AI_MESH_FULL_STRESS_PAPER_ONLY",
   generatedAt: new Date().toISOString(),
   config: { providers, rounds, nodesPerProvider, concurrency, maxOutputTokens },
+  credentialStatus: secretStatus,
   providers: Object.fromEntries([...results.entries()].map(([name, r]) => [name, {
-    status: r.status,
-    attempts: r.attempts,
-    success: r.success,
-    failures: r.failures,
+    status: r.status, attempts: r.attempts, success: r.success, failures: r.failures,
     successRate: r.attempts ? +(r.success / r.attempts).toFixed(4) : 0,
-    latency: latencyStats(r.latencyMs),
-    promptTokens: r.promptTokens,
-    outputTokens: r.outputTokens,
-    totalTokens: r.totalTokens,
-    avgTokensPerSuccess: r.success ? +(r.totalTokens / r.success).toFixed(1) : 0,
-    error: r.error,
+    latency: latencyStats(r.latencyMs), promptTokens: r.promptTokens, outputTokens: r.outputTokens,
+    totalTokens: r.totalTokens, avgTokensPerSuccess: r.success ? +(r.totalTokens / r.success).toFixed(1) : 0, error: r.error,
   }])),
   cooperation: { vectors: allVectors.length, scoreMean, topVectors: top },
-  paperAccountCompatibility: {
-    mode: "SIMULATED_PAPER_LEDGER",
-    noRealOrders: true,
-    noRealPayments: true,
-    accounts: paper,
-  },
+  paperAccountCompatibility: { mode: "SIMULATED_PAPER_LEDGER", noRealOrders: true, noRealPayments: true, accounts: paper },
 };
 
 await Bun.write("ai-mesh-full-stress.json", JSON.stringify(report, null, 2));
 await Bun.write("ai-mesh-full-stress.md", [
-  "# AI Mesh Full Stress",
-  "",
-  `Status: ${report.status}`,
-  `Providers: ${providers.join(", ")}`,
-  `Rounds: ${rounds}`,
-  `Nodes/provider: ${nodesPerProvider}`,
-  `Concurrency: ${concurrency}`,
-  `Max output tokens/request: ${maxOutputTokens}`,
-  `Cooperation vectors: ${allVectors.length}`,
-  `Mean cooperation score: ${scoreMean}`,
-  "",
-  ...Object.entries(report.providers).map(([name, p]) => `- ${name}: ${p.status}; success ${p.successRate}; latency p50 ${p.latency.p50}ms / p95 ${p.latency.p95}ms; tokens ${p.totalTokens}`),
-  "",
-  "Paper account check is simulated only: no real orders, payments, wallets, or external account actions.",
+  "# AI Mesh Full Stress", "", `Status: ${report.status}`, `Providers: ${providers.join(", ")}`,
+  `Rounds: ${rounds}`, `Nodes/provider: ${nodesPerProvider}`, `Concurrency: ${concurrency}`, `Max output tokens/request: ${maxOutputTokens}`,
+  "", "## Credentials", ...providers.map((p) => `- ${p}: key=${secretStatus[p].key ? "present" : "MISSING"}; model=${secretStatus[p].model ? (secretStatus[p].defaultModel ? "configured/default" : "present") : "MISSING"}`),
+  "", `Cooperation vectors: ${allVectors.length}`, `Mean cooperation score: ${scoreMean}`, "",
+  ...Object.entries(report.providers).map(([name, p]) => `- ${name}: **${p.status}**; success ${p.successRate}; latency p50 ${p.latency.p50}ms / p95 ${p.latency.p95}ms; tokens ${p.totalTokens}${p.error ? `; error: ${p.error}` : ""}`),
+  "", "Paper account check is simulated only: no real orders, payments, wallets, or external account actions.",
 ].join("\n"));
 
 console.log(JSON.stringify(report, null, 2));
