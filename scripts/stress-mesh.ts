@@ -27,13 +27,8 @@ function short(text: string): string {
 
 function makeSyntheticVector(nodeId: number, round: number, agent: Agent): AgentVector {
   const opportunity = engines[nodeId].market.discoverTasks(1, engines[nodeId].rng)[0];
-  return encodeVector(
-    agent,
-    opportunity,
-    round,
-    agent.stats.netProfit,
-    agent.stats.successRate,
-  );
+  if (!opportunity) throw new Error(`node ${nodeId} produced no opportunity`);
+  return encodeVector(agent, opportunity, round, agent.stats.netProfit, agent.stats.successRate);
 }
 
 async function askAi(nodeId: number, context: AgentVector): Promise<AgentVector> {
@@ -110,15 +105,21 @@ let receiveOps = 0;
 let receiveVectors = 0;
 let aiCalls = 0;
 let aiFailures = 0;
+let nodeFailures = 0;
 
 for (let round = 0; round < rounds; round++) {
   for (let nodeId = 0; nodeId < nodes; nodeId++) {
     const engine = engines[nodeId];
-    engine.step(NEUTRAL_MESH);
-    const selected = engine.agents.slice(0, Math.min(engine.agents.length, vectorsPerNode));
-    for (const agent of selected) {
-      bus.publish(makeSyntheticVector(nodeId, round, agent));
-      published++;
+    try {
+      engine.step(NEUTRAL_MESH);
+      const selected = engine.agents.slice(0, Math.min(engine.agents.length, vectorsPerNode));
+      for (const agent of selected) {
+        bus.publish(makeSyntheticVector(nodeId, round, agent));
+        published++;
+      }
+    } catch (error) {
+      nodeFailures++;
+      console.log(`mesh node failed: ${short(error instanceof Error ? error.message : String(error))}`);
     }
   }
 
@@ -159,6 +160,7 @@ const result = {
   aiConcurrency,
   aiCalls,
   aiFailures,
+  nodeFailures,
   publishedVectors: published,
   peakBusMessages: peakBus,
   receiveOps,
@@ -169,10 +171,35 @@ const result = {
   generatedAt: new Date().toISOString(),
 };
 
-const report = `# Mesh Stress Result\n\n- Status: ${result.status}\n- Nodes: ${nodes}\n- Rounds: ${rounds}\n- Vectors/node/round: ${vectorsPerNode}\n- Bus capacity: ${busCapacity}\n- Published vectors: ${published}\n- Peak bus messages: ${peakBus}\n- Receive vectors: ${receiveVectors}\n- Time: ${result.elapsedMs} ms\n- Throughput: ${result.messagesPerSecond} vectors/s\n- AI nodes requested: ${aiNodes}\n- AI enabled: ${aiEnabled}\n- AI calls: ${aiCalls}\n- AI failures: ${aiFailures}\n\n## Interpretation\nThe stress test measures mesh throughput, bounded-memory behavior, vector ranking and optional real model-node participation. It does not execute real financial transactions.\n`;
+const report = [
+  "# Mesh Stress Result",
+  "",
+  `- Status: ${result.status}`,
+  `- Nodes: ${nodes}`,
+  `- Rounds: ${rounds}`,
+  `- Vectors/node/round: ${vectorsPerNode}`,
+  `- Bus capacity: ${busCapacity}`,
+  `- Published vectors: ${published}`,
+  `- Peak bus messages: ${peakBus}`,
+  `- Receive vectors: ${receiveVectors}`,
+  `- Node failures: ${nodeFailures}`,
+  `- Time: ${result.elapsedMs} ms`,
+  `- Throughput: ${result.messagesPerSecond} vectors/s`,
+  `- AI nodes requested: ${aiNodes}`,
+  `- AI enabled: ${aiEnabled}`,
+  `- AI calls: ${aiCalls}`,
+  `- AI failures: ${aiFailures}`,
+  "",
+  "## Interpretation",
+  "The stress test measures mesh throughput, bounded-memory behavior, vector ranking and optional real model-node participation. It does not execute real financial transactions.",
+  "",
+].join("\n");
 
 await Bun.write("mesh-stress-results.json", JSON.stringify(result, null, 2));
 await Bun.write("mesh-stress-result.md", report);
-await Bun.write("COPILOT_MESH_STRESS.md", `${report}\n## Copilot handoff\n\nUse this result to optimize `src/farm/vector-bus.ts`, `src/farm/api.ts`, and `scripts/stress-mesh.ts`. Preserve compact vectors, bounded memory, deterministic farm state, and independent economic fitness. Do not add payment signing or transaction broadcasting.\n`);
+await Bun.write(
+  "COPILOT_MESH_STRESS.md",
+  `${report}\n## Copilot handoff\n\nUse this result to optimize src/farm/vector-bus.ts, src/farm/api.ts, and scripts/stress-mesh.ts. Preserve compact vectors, bounded memory, deterministic farm state, and independent economic fitness. Do not add payment signing or transaction broadcasting.\n`,
+);
 
 console.log(JSON.stringify(result, null, 2));
