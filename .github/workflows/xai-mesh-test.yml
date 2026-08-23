@@ -1,7 +1,12 @@
-name: xAI Mesh Connectivity Test
+name: AI Mesh Connectivity Test
 
 on:
   workflow_dispatch:
+    inputs:
+      providers:
+        description: "Comma-separated providers: xai,claude,gemini,groq,openrouter"
+        required: false
+        default: "xai,claude,gemini,groq,openrouter"
   push:
     branches:
       - Work/ai-farm-audit
@@ -10,13 +15,21 @@ permissions:
   contents: read
 
 jobs:
-  test-xai:
+  connectivity:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
+      AI_PROVIDERS: ${{ inputs.providers || 'xai,claude,gemini,groq,openrouter' }}
       XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
-      XAI_BASE_URL: https://api.x.ai
       XAI_MODEL: ${{ secrets.XAI_MODEL }}
+      CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+      CLAUDE_MODEL: ${{ secrets.CLAUDE_MODEL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GROQ_MODEL: ${{ secrets.GROQ_MODEL }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      OPENROUTER_MODEL: ${{ secrets.OPENROUTER_MODEL }}
     steps:
       - name: Checkout audit branch
         uses: actions/checkout@v4
@@ -32,14 +45,14 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile
 
-      - name: Run 2-node vector-only xAI test
-        run: bun run scripts/test-xai-mesh.ts
+      - name: Test vector-only AI connectivity
+        run: bun run scripts/test-ai-providers.ts
 
-      - name: Upload xAI mesh test
+      - name: Upload AI connectivity report
         uses: actions/upload-artifact@v4
         with:
-          name: xai-mesh-test
+          name: ai-mesh-connectivity
           path: |
-            xai-mesh-test.json
-            xai-mesh-test.md
+            ai-provider-connectivity.json
+            ai-provider-connectivity.md
           if-no-files-found: error
