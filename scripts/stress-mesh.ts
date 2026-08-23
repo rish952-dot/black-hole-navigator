@@ -189,10 +189,8 @@ const report = `# Mesh Stress Result
 
 await Bun.write("mesh-stress-results.json", JSON.stringify(result, null, 2));
 await Bun.write("mesh-stress-result.md", report);
-await Bun.write("COPILOT_MESH_STRESS.md", `${report}
 
-## Copilot handoff
-
-Use this result to optimize src/farm/vector-bus.ts, src/farm/api.ts, and scripts/stress-mesh.ts. Preserve compact protocol.`);
+const handoffNotes = "Use this result to optimize src/farm/vector-bus.ts, src/farm/api.ts, and scripts/stress-mesh.ts. Preserve compact protocol.";
+await Bun.write("COPILOT_MESH_STRESS.md", report + "\n## Copilot handoff\n\n" + handoffNotes);
 
 console.log(JSON.stringify(result, null, 2));
