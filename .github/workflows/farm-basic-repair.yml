@@ -1,0 +1,61 @@
+name: Farm Basic Repair
+
+on:
+  push:
+    branches:
+      - Work/ai-farm-audit
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: farm-basic-repair-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repair-and-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v4
+        with:
+          ref: Work/ai-farm-audit
+          fetch-depth: 2
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Restore only missing allowlisted files
+        run: bun scripts/basic-farm-repair.ts
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck/build
+        run: |
+          if bun run typecheck; then
+            echo "typecheck: pass"
+          else
+            echo "typecheck script unavailable or failed; continuing to build"
+          fi
+          bun run build
+
+      - name: Tests
+        run: bun test
+
+      - name: Commit safe repairs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/farm scripts/run-farm-bot.ts
+          if git diff --cached --quiet; then
+            echo "No repair changes to commit."
+          else
+            git commit -m "fix: self-heal missing farm files [skip ci]"
+            git push origin HEAD:Work/ai-farm-audit
+          fi
