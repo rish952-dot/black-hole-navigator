@@ -27,6 +27,11 @@ export default function MeshPage() {
             </p>
           </div>
         </div>
+        <Button asChild size="sm" variant="outline" className="h-8 px-3">
+          <Link to="/farm">
+            <span className="font-mono text-xs">Agent Farm</span>
+          </Link>
+        </Button>
       </header>
       <div className="flex-1 overflow-hidden p-2 md:p-3">
         <NeuralTapestry className="h-full" />
