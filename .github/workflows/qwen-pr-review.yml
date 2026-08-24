@@ -6,6 +6,7 @@ on:
     paths:
       - 'src/**'
       - 'package.json'
+      - 'bun.lock'
       - 'bun.lockb'
       - 'vite.config.*'
       - '.github/workflows/**'
@@ -20,6 +21,7 @@ concurrency:
 
 jobs:
   review:
+    if: ${{ secrets.QWEN_API_KEY != '' || secrets.DASHSCOPE_API_KEY != '' || secrets.OPENAI_API_KEY != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -27,10 +29,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Verify Qwen credentials
+        env:
+          QWEN_KEY: ${{ secrets.QWEN_API_KEY || secrets.DASHSCOPE_API_KEY || secrets.OPENAI_API_KEY }}
+        run: test -n "$QWEN_KEY"
+
       - name: Review with Qwen Code
         uses: QwenLM/qwen-code-action@v1
         with:
-          openai_api_key: ${{ secrets.QWEN_API_KEY }}
+          openai_api_key: ${{ secrets.QWEN_API_KEY || secrets.DASHSCOPE_API_KEY || secrets.OPENAI_API_KEY }}
           openai_base_url: ${{ vars.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1' }}
           openai_model: ${{ vars.QWEN_MODEL || 'qwen-coder-plus-latest' }}
           qwen_cli_version: ${{ vars.QWEN_CLI_VERSION || 'latest' }}
@@ -40,3 +47,12 @@ jobs:
             Focus on runtime failures, TypeScript/build errors, state synchronization, React lifecycle leaks, CPU performance, mobile layout regressions, security issues, missing tests, and fake/ambiguous subsystem health reporting.
             Pay particular attention to FarmEngine, Central Mind, Department Mesh, LiveMeshNetwork, NeuralTapestry, AI adapters, Supabase integration and deployment workflows.
             Do not demand speculative rewrites. Report concrete findings with severity and file/line references.
+
+  review-disabled:
+    if: ${{ secrets.QWEN_API_KEY == '' && secrets.DASHSCOPE_API_KEY == '' && secrets.OPENAI_API_KEY == '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain disabled review
+        run: |
+          echo 'Qwen PR review skipped: no QWEN_API_KEY, DASHSCOPE_API_KEY, or OPENAI_API_KEY repository secret is configured.'
+          echo 'Configure one of those secrets to enable the autonomous review.'
