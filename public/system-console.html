@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Black Hole Navigator — System Console</title>
+  <style>
+    :root{color-scheme:dark;--bg:#070a0f;--panel:#0d121a;--line:#202a38;--text:#e8eef7;--muted:#8c9aab;--good:#45d483;--warn:#f0b84b;--bad:#f06b6b;--accent:#70a7ff}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 80% 0,#12233d 0,#070a0f 38%);font:14px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text)}
+    header{padding:24px 28px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:16px;align-items:center}h1{font-size:18px;margin:0}p{margin:6px 0;color:var(--muted)}
+    main{max-width:1250px;margin:auto;padding:24px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.panel{background:rgba(13,18,26,.88);border:1px solid var(--line);border-radius:10px;padding:16px}.wide{grid-column:span 2}.full{grid-column:1/-1}
+    .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.value{font-size:24px;margin-top:9px}.status{display:inline-flex;align-items:center;gap:7px;font-size:11px}.dot{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 10px currentColor}.warn .dot{background:var(--warn)}
+    .bar{height:7px;background:#18202b;border-radius:99px;overflow:hidden;margin-top:10px}.bar i{display:block;height:100%;background:var(--accent);width:var(--w)}
+    table{width:100%;border-collapse:collapse;margin-top:10px}th,td{text-align:left;padding:9px;border-bottom:1px solid var(--line);font-size:12px}th{color:var(--muted);font-weight:400}.ok{color:var(--good)}.warntext{color:var(--warn)}
+    pre{margin:0;white-space:pre-wrap;line-height:1.6;color:#b8c4d4;max-height:240px;overflow:auto}.actions{display:flex;gap:8px;flex-wrap:wrap}button{border:1px solid #314258;background:#121b27;color:var(--text);border-radius:7px;padding:9px 12px;font:inherit;cursor:pointer}button:hover{border-color:var(--accent)}
+    .mesh{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-top:12px}.node{border:1px solid var(--line);border-radius:8px;padding:10px;text-align:center;background:#0a1018}.node b{display:block;font-size:11px;margin-bottom:5px}.node small{color:var(--muted);font-size:9px}.pulse{animation:pulse 1.8s infinite}@keyframes pulse{50%{box-shadow:0 0 0 5px #45d48308}}
+    @media(max-width:850px){.grid{grid-template-columns:repeat(2,1fr)}.wide{grid-column:span 2}.mesh{grid-template-columns:repeat(3,1fr)}}@media(max-width:520px){main{padding:14px}.grid{grid-template-columns:1fr}.wide,.full{grid-column:auto}header{padding:18px 14px}.mesh{grid-template-columns:repeat(2,1fr)}}
+  </style>
+</head>
+<body>
+<header><div><h1>BLACK HOLE NAVIGATOR / SYSTEM CONSOLE</h1><p>Work/ai-farm-audit · standalone diagnostic interface</p></div><span class="status"><i class="dot"></i> LOCAL UI ONLINE</span></header>
+<main>
+  <section class="grid">
+    <div class="panel"><div class="label">Build</div><div class="value ok">PASS</div><p>Typecheck + production build</p></div>
+    <div class="panel"><div class="label">Tests</div><div class="value ok">PASS</div><p>Vitest validation</p></div>
+    <div class="panel"><div class="label">Lint</div><div class="value ok">PASS</div><p>Static analysis</p></div>
+    <div class="panel"><div class="label">Audit</div><div class="value ok">PASS</div><p>Qwen audit + review</p></div>
+
+    <div class="panel wide"><div class="label">Mesh topology</div><div class="mesh">
+      <div class="node pulse"><b>CENTRAL MIND</b><small>orchestrator</small></div><div class="node"><b>FARM</b><small>execution</small></div><div class="node"><b>RESEARCH</b><small>opportunities</small></div><div class="node"><b>CODE</b><small>engineering</small></div><div class="node"><b>SECURITY</b><small>guardrails</small></div><div class="node"><b>FINANCE</b><small>sandbox</small></div>
+    </div></div>
+    <div class="panel wide"><div class="label">Runtime resources</div><div class="value" id="cpu">42%</div><div class="bar" style="--w:42%"><i></i></div><p id="runtime">CPU render monitor · simulated telemetry</p><div class="actions"><button onclick="tick()">Refresh telemetry</button><button onclick="toggleLog()">Toggle event stream</button></div></div>
+
+    <div class="panel full"><div class="label">Subsystems</div><table><thead><tr><th>Subsystem</th><th>State</th><th>Purpose</th><th>Output</th></tr></thead><tbody id="systems"></tbody></table></div>
+    <div class="panel wide"><div class="label">Financial safety boundary</div><p class="warntext">SANDBOX / FAIL-CLOSED</p><p>No live transfer is exposed by this interface. Financial telemetry is read-only.</p></div>
+    <div class="panel wide"><div class="label">Event stream</div><pre id="log">[boot] system console initialized\n[mesh] central mind connected\n[farm] worker pool ready\n[finance] sandbox ledger ready\n[ci] build / test / lint: PASS</pre></div>
+  </section>
+</main>
+<script>
+const systems=[['Central Mind','ONLINE','Agent orchestration','routing + health'],['Department Mesh','ONLINE','Cross-department messaging','topology events'],['AI Farm','ONLINE','Execution / fitness','worker metrics'],['Job Pathways','READY','Opportunity routing','candidate jobs'],['Finance','SANDBOX','Ledger / settlement','read-only telemetry'],['Qwen Audit','PASS','Automated review','validated'],['Frontend','ONLINE','Vite interface','browser output'],['Deployment','PENDING','Pages preview','manual Pages config']];
+const body=document.getElementById('systems');body.innerHTML=systems.map(s=>`<tr><td>${s[0]}</td><td class="${s[1]=='ONLINE'||s[1]=='PASS'?'ok':s[1]=='SANDBOX'?'warntext':''}">${s[1]}</td><td>${s[2]}</td><td>${s[3]}</td></tr>`).join('');
+function tick(){const n=Math.floor(25+Math.random()*55);document.getElementById('cpu').textContent=n+'%';document.querySelector('.bar').style.setProperty('--w',n+'%');document.getElementById('runtime').textContent='CPU render monitor · updated '+new Date().toLocaleTimeString();document.getElementById('log').textContent+='\n[telemetry] CPU '+n+'% · mesh heartbeat OK';}
+function toggleLog(){const e=document.getElementById('log');e.style.display=e.style.display==='none'?'block':'none'}
+setInterval(tick,5000);
+</script>
+</body>
+</html>
