@@ -6,6 +6,7 @@ on:
     paths:
       - 'src/**'
       - 'package.json'
+      - 'bun.lock'
       - 'bun.lockb'
       - 'vite.config.*'
       - '.github/workflows/**'
@@ -21,16 +22,31 @@ concurrency:
 jobs:
   review:
     runs-on: ubuntu-latest
+    env:
+      QWEN_API_KEY: ${{ secrets.QWEN_API_KEY || secrets.DASHSCOPE_API_KEY || secrets.OPENAI_API_KEY }}
     steps:
+      - name: Check Qwen credentials
+        id: credentials
+        shell: bash
+        run: |
+          if [[ -n "$QWEN_API_KEY" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "Qwen PR review skipped: no Qwen-compatible API secret configured."
+          fi
+
       - name: Checkout
+        if: steps.credentials.outputs.available == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Review with Qwen Code
+        if: steps.credentials.outputs.available == 'true'
         uses: QwenLM/qwen-code-action@v1
         with:
-          openai_api_key: ${{ secrets.QWEN_API_KEY }}
+          openai_api_key: ${{ env.QWEN_API_KEY }}
           openai_base_url: ${{ vars.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1' }}
           openai_model: ${{ vars.QWEN_MODEL || 'qwen-coder-plus-latest' }}
           qwen_cli_version: ${{ vars.QWEN_CLI_VERSION || 'latest' }}
