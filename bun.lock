@@ -84,5 +84,10 @@
       }
     }
   },
-  "packages": {}
+  "packages": {
+    "": {
+      "name": "vite_react_shadcn_ts",
+      "version": "0.0.0"
+    }
+  }
 }
