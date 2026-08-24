@@ -22,9 +22,17 @@ on:
   push:
     branches:
       - Work/ai-farm-audit
+    paths:
+      - "src/farm/**"
+      - scripts/stress-mesh.ts
+      - .github/workflows/mesh-stress.yml
 
 permissions:
   contents: read
+
+concurrency:
+  group: mesh-stress-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   stress:
@@ -55,7 +63,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.4.0
 
       - name: Install
         run: bun install --frozen-lockfile

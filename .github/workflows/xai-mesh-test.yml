@@ -10,9 +10,16 @@ on:
   push:
     branches:
       - Work/ai-farm-audit
+    paths:
+      - .github/workflows/xai-mesh-test.yml
+      - scripts/test-ai-providers.ts
 
 permissions:
   contents: read
+
+concurrency:
+  group: xai-mesh-test-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   connectivity:
@@ -40,7 +47,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.4.0
 
       - name: Install
         run: bun install --frozen-lockfile
