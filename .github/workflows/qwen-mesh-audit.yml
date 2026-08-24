@@ -29,23 +29,32 @@ concurrency:
 
 jobs:
   qwen-audit:
-    if: ${{ secrets.QWEN_API_KEY != '' || secrets.DASHSCOPE_API_KEY != '' || secrets.OPENAI_API_KEY != '' }}
     runs-on: ubuntu-latest
+    env:
+      QWEN_API_KEY: ${{ secrets.QWEN_API_KEY || secrets.DASHSCOPE_API_KEY || secrets.OPENAI_API_KEY }}
     steps:
+      - name: Check Qwen credentials
+        id: credentials
+        shell: bash
+        run: |
+          if [[ -n "$QWEN_API_KEY" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "Qwen mesh audit skipped: no Qwen-compatible API secret configured."
+          fi
+
       - name: Checkout
+        if: steps.credentials.outputs.available == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Verify Qwen credentials
-        env:
-          QWEN_KEY: ${{ secrets.QWEN_API_KEY || secrets.DASHSCOPE_API_KEY || secrets.OPENAI_API_KEY }}
-        run: test -n "$QWEN_KEY"
-
       - name: Qwen Code audit and safe fixes
+        if: steps.credentials.outputs.available == 'true'
         uses: QwenLM/qwen-code-action@v1
         with:
-          openai_api_key: ${{ secrets.QWEN_API_KEY || secrets.DASHSCOPE_API_KEY || secrets.OPENAI_API_KEY }}
+          openai_api_key: ${{ env.QWEN_API_KEY }}
           openai_base_url: ${{ vars.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1' }}
           openai_model: ${{ vars.QWEN_MODEL || 'qwen-coder-plus-latest' }}
           qwen_cli_version: ${{ vars.QWEN_CLI_VERSION || 'latest' }}
@@ -69,12 +78,3 @@ jobs:
 
             Current requested task: ${{ inputs.task || 'Audit the mesh architecture, frontend, backend integration, tests, and deployment. Fix safe bugs and report anything requiring secrets or manual infrastructure.' }}
           upload_artifacts: 'false'
-
-  qwen-disabled:
-    if: ${{ secrets.QWEN_API_KEY == '' && secrets.DASHSCOPE_API_KEY == '' && secrets.OPENAI_API_KEY == '' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Explain disabled audit
-        run: |
-          echo 'Qwen audit skipped: no QWEN_API_KEY, DASHSCOPE_API_KEY, or OPENAI_API_KEY repository secret is configured.'
-          echo 'Configure one of those secrets to enable the autonomous Qwen audit.'
