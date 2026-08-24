@@ -27,6 +27,20 @@ export type JobPath = {
   nextAction: string;
 };
 
+/** A real, externally-published contract that pays for completed work. */
+export type HuntListing = {
+  id: string;
+  source: string;
+  title: string;
+  organization?: string;
+  rewardUsd?: number;
+  currency?: string;
+  url: string;
+  skills: string[];
+  kind: "bounty" | "audit-competition" | "quest" | "freelance";
+  fetchedAt: string;
+};
+
 export function buildJobPath(profile: AgentProfile, opportunity: JobOpportunity): JobPath {
   const skills = new Set(profile.skills.map((s) => s.toLowerCase()));
   const missingSkills = opportunity.skills.filter((s) => !skills.has(s.toLowerCase()));

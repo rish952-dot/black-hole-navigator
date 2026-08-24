@@ -2,6 +2,7 @@ import { mkdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { FarmEngine } from "../src/farm/engine";
 import { CentralMind } from "../src/farm/central-mind";
+import { discoverRealContracts, type HuntDiscovery } from "../src/farm/hunt-sources";
 import { DEFAULT_CONFIG, NEUTRAL_MESH, type DeploymentMode, type GenerationRecord } from "../src/farm/types";
 import type { HiveNode } from "../src/farm/hive-topology";
 
@@ -130,6 +131,7 @@ async function publish() {
         reason: "This daemon does not sign or submit blockchain transactions. Proposals are bookkeeping only; simulated profits are not real funds.",
       },
     },
+    contracts,
   };
   await mkdir(outDir, { recursive: true });
   const tmp = path.join(outDir, ".fleet-status.tmp");
@@ -158,6 +160,15 @@ function stepBot(bot: Bot) {
 }
 
 const startedAt = new Date().toISOString();
+let contracts: HuntDiscovery | null = null;
+
+async function refreshContracts() {
+  try {
+    contracts = await discoverRealContracts(12);
+  } catch (error) {
+    console.error(`[fleet] contract discovery failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
 
 async function tick() {
   if (shuttingDown) return;
@@ -180,5 +191,7 @@ process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
 console.log(`[fleet] starting ${botCount} ${mode} bots · population ${populationSize} · tick ${tickMs}ms · output ${outDir}`);
+await refreshContracts();
+setInterval(refreshContracts, 10 * 60 * 1000);
 await publish();
 setInterval(tick, tickMs);

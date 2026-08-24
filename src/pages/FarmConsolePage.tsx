@@ -54,6 +54,11 @@ interface FleetStatus {
     proposals: { botId: number; amount: number }[];
     totalProposed: number;
   };
+  contracts?: {
+    fetchedAt: string;
+    live: { source: string; count: number; error?: string }[];
+    listings: { id: string; source: string; title: string; organization?: string; rewardUsd?: number; currency?: string; url: string; kind: string }[];
+  } | null;
 }
 
 function LiveFleetPanel() {
@@ -103,6 +108,29 @@ function LiveFleetPanel() {
           </div>
           <div className="mt-0.5 text-amber-100/60">
             proposed {fmt(fleet.payout.totalProposed)} {fleet.payout.asset} · share {fleet.payout.share} · paper only, no funds moved
+          </div>
+        </div>
+      )}
+      {fleet.contracts && fleet.contracts.listings.length > 0 && (
+        <div className="rounded-md border border-emerald-400/20 bg-emerald-500/5 p-2 font-mono text-[9px]">
+          <div className="flex items-center justify-between text-emerald-300/80">
+            <span>REAL PAYING CONTRACTS</span>
+            <span>{fleet.contracts.listings.length} found</span>
+          </div>
+          <div className="mt-0.5 text-emerald-100/45">
+            live: {fleet.contracts.live.map((l) => `${l.source} ${l.count}`).join(" · ")} — apply via each platform; farm never auto-submits
+          </div>
+          <div className="mt-1 space-y-0.5">
+            {fleet.contracts.listings.slice(0, 8).map((l) => (
+              <div key={l.id} className="flex items-baseline justify-between gap-2">
+                <a href={l.url} target="_blank" rel="noreferrer" className="truncate text-emerald-100/70 underline decoration-emerald-400/30 hover:text-emerald-100">
+                  {l.title}
+                </a>
+                <span className="shrink-0 text-emerald-300/70">
+                  {l.rewardUsd ? `${fmt(l.rewardUsd)} ${l.currency ?? ""}` : l.currency ?? l.kind}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}
