@@ -15,6 +15,12 @@ Internal/private Financial Intelligence & Settlement layer. Disabled by default;
 - `farm-bridge.ts` mirrors `farm/ledger.ts` transactions into the finance ledger (idempotent per farm tx id) and never throws into the farm loop.
 - UI: only `src/components/finance/FinanceTelemetryPanel.tsx`, hidden unless `VITE_FINANCE_TELEMETRY=true`, aggregates only, no transaction detail/destinations/credentials.
 
+### Cryptocurrency rail (`src/finance/crypto-*.ts`)
+Crypto-only counterpart, same invariants and posture: separate bigint (wei) hash-chained ledger (`crypto-ledger.ts`, per-asset entries from the registered `CRYPTO_ASSETS` registry in `crypto.ts`), `crypto:*` chart of accounts (`crypto-accounts.ts`), per-asset bigint spend limits (`crypto-spend-gate.ts`, fail-closed when an asset has no limits), PROPOSED → APPROVED → SETTLED/FAILED lifecycle with compensating release (`crypto-settlement.ts`), per-asset reconciliation + crypto anomaly detection incl. payouts missing an on-chain tx hash (`crypto-reconciliation.ts`).
+- Provider boundary (`crypto-provider.ts`): default `DisabledSandboxCryptoProvider` (Sepolia only, simulated tx hash, no network); `EvmCryptoProvider` validates credentials at construction and refuses to broadcast until a signer is wired in — the integration point for a real rail.
+- Env: `CRYPTO_MODE=live` requires `CRYPTO_LIVE_ENABLED=true`, `CRYPTO_RPC_URL` (https/wss), `CRYPTO_PRIVATE_KEY` (0x + 32 bytes), and non-zero per-asset limits (`CRYPTO_LIMIT_<ASSET>_{PER_TX,AGENT_DAILY,TOTAL_DAILY}`, e.g. `CRYPTO_LIMIT_ETH_ETHEREUM_PER_TX=0.05`). `CRYPTO_ASSETS` selects the enabled registry keys; sandbox rejects mainnet assets.
+- Facade: `CryptoFinanceService` (`crypto-service.ts`) + read-only `createCryptoFinanceApi` (`crypto-api.ts`); telemetry is per-asset aggregates only (custody/revenue/costs/P&L/pending/spend-today), no addresses/tx hashes/credentials.
+
 ## Existing finance modules (do not duplicate)
 - `src/farm/ledger.ts`: simulation bookkeeping for the evolution engine (kept simulation-local).
 - `src/farm/payment-manager.ts` / `payment-ledger.ts`: approval-gated paper payment proposals used by `central-mind.ts` and `hosting-screener.ts`.

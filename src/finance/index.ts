@@ -29,3 +29,43 @@ export {
   LimitExceededError,
   SettlementStateError,
 } from "./errors";
+
+// ---- Cryptocurrency rail (crypto-only; separate ledger, accounts, limits) --
+
+export {
+  CryptoFinanceService,
+  type CryptoTelemetry,
+  type CryptoAssetTelemetry,
+  type RecordCryptoEarningsInput,
+  type RecordCryptoCostInput,
+} from "./crypto-service";
+export { createCryptoFinanceApi, type CryptoFinanceApi } from "./crypto-api";
+export { CryptoLedger, type CryptoJournalEntry, type CryptoJournalLine, type CryptoPostingKind } from "./crypto-ledger";
+export { CryptoSettlementEngine, type CryptoSettlementRecord, type CryptoSettlementStatus } from "./crypto-settlement";
+export { CryptoSpendGate, type CryptoLimits, type CryptoAssetLimits } from "./crypto-spend-gate";
+export {
+  DisabledSandboxCryptoProvider,
+  EvmCryptoProvider,
+  type CryptoSettlementProvider,
+  type CryptoTransferRequest,
+  type CryptoTransferResult,
+} from "./crypto-provider";
+export {
+  reconcileCrypto,
+  detectCryptoAnomalies,
+  type CryptoReconciliationReport,
+  type CryptoAnomaly,
+} from "./crypto-reconciliation";
+export { resolveCryptoConfig, publicCryptoConfig, type CryptoConfig, type CryptoMode } from "./crypto-config";
+export {
+  CRYPTO_ASSETS,
+  CryptoAssetError,
+  requireAsset,
+  assertEvmAddress,
+  parseUnits,
+  formatUnits,
+  type CryptoAsset,
+  type AssetKey,
+  type ChainId,
+} from "./crypto";
+export { CRYPTO_ACCOUNT_IDS, type CryptoAccountId } from "./crypto-accounts";
