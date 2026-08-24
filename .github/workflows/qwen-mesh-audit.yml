@@ -1,0 +1,64 @@
+name: Qwen Mesh Audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Audit/fix scope'
+        required: false
+        default: 'Audit the mesh architecture, frontend, backend integration, tests, and deployment. Fix safe bugs and report anything requiring secrets or manual infrastructure.'
+        type: string
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'src/**'
+      - 'package.json'
+      - 'bun.lockb'
+      - 'vite.config.*'
+      - '.github/workflows/**'
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: qwen-mesh-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qwen-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Qwen Code audit and safe fixes
+        uses: QwenLM/qwen-code-action@v1
+        with:
+          openai_api_key: ${{ secrets.QWEN_API_KEY }}
+          openai_base_url: ${{ vars.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1' }}
+          openai_model: ${{ vars.QWEN_MODEL || 'qwen-coder-plus-latest' }}
+          qwen_cli_version: ${{ vars.QWEN_CLI_VERSION || 'latest' }}
+          qwen_debug: ${{ vars.DEBUG || 'false' }}
+          prompt: |
+            You are the autonomous engineering auditor for the Schwarzschild Lab / black-hole-navigator project.
+
+            Read QWEN.md first. Treat the existing FarmEngine, Central Mind, Department Mesh, LiveMeshNetwork, NeuralTapestry, allocator, executor, ledger, Supabase integration and deployment workflows as the current architecture. Do not replace the architecture with a toy rewrite.
+
+            Mission:
+            1. Inspect the repository for TypeScript/Vite/runtime/build errors and broken integrations.
+            2. Run the available tests/build/lint/type checks before changing code.
+            3. Prioritize making the application usable and stable over adding features.
+            4. Preserve CPU-first mesh rendering and keep the live mesh visualization driven by actual runtime state.
+            5. Verify that frontend state, mesh state, farm state and backend/API state do not silently diverge.
+            6. Fix safe, local bugs directly. Do not invent credentials, API keys, payment credentials, database URLs, or production secrets.
+            7. Do not enable real-money payments or autonomous external execution without explicit implementation and safety checks.
+            8. If a dependency, secret, deployment setting, or external service is required, leave a precise diagnostic in the workflow summary instead of faking success.
+            9. Add or improve regression tests for every bug you fix when practical.
+            10. At the end, summarize: checks run, files changed, bugs fixed, remaining blockers, and exact manual actions required.
+
+            Current requested task: ${{ inputs.task || 'Audit the mesh architecture, frontend, backend integration, tests, and deployment. Fix safe bugs and report anything requiring secrets or manual infrastructure.' }}
+          upload_artifacts: 'false'
