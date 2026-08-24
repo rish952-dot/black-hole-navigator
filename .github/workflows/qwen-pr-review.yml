@@ -1,0 +1,42 @@
+name: Qwen PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'src/**'
+      - 'package.json'
+      - 'bun.lockb'
+      - 'vite.config.*'
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: qwen-pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Review with Qwen Code
+        uses: QwenLM/qwen-code-action@v1
+        with:
+          openai_api_key: ${{ secrets.QWEN_API_KEY }}
+          openai_base_url: ${{ vars.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1' }}
+          openai_model: ${{ vars.QWEN_MODEL || 'qwen-coder-plus-latest' }}
+          qwen_cli_version: ${{ vars.QWEN_CLI_VERSION || 'latest' }}
+          prompt: |
+            Review this pull request as a strict senior engineer.
+            Read QWEN.md and inspect the complete affected code, not only the diff.
+            Focus on runtime failures, TypeScript/build errors, state synchronization, React lifecycle leaks, CPU performance, mobile layout regressions, security issues, missing tests, and fake/ambiguous subsystem health reporting.
+            Pay particular attention to FarmEngine, Central Mind, Department Mesh, LiveMeshNetwork, NeuralTapestry, AI adapters, Supabase integration and deployment workflows.
+            Do not demand speculative rewrites. Report concrete findings with severity and file/line references.
