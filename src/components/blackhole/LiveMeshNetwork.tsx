@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { createDefaultDepartmentMesh, type DepartmentId } from "@/farm/department-mesh";
 
 type Node = { id: DepartmentId; x: number; y: number; vx: number; vy: number; load: number; health: number; phase: number };
@@ -14,6 +14,7 @@ export default function LiveMeshNetwork() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const nodesRef = useRef<Node[]>([]);
   const selectedRef = useRef<DepartmentId | null>(null);
+  const pausedRef = useRef(false);
   const [selected, setSelected] = useState<DepartmentId | null>(null);
   const [fps, setFps] = useState(60);
   const [tick, setTick] = useState(0);
@@ -27,10 +28,11 @@ export default function LiveMeshNetwork() {
       const key = [a, b].sort().join("|");
       if (!seen.has(key)) { seen.add(key); links.push({ a, b }); }
     }
-    return { mesh, links };
+    return { links };
   }, []);
 
   useEffect(() => { selectedRef.current = selected; }, [selected]);
+  useEffect(() => { pausedRef.current = paused; }, [paused]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -65,7 +67,7 @@ export default function LiveMeshNetwork() {
       const nodes = nodesRef.current;
       const map = new Map(nodes.map(n => [n.id, n]));
 
-      if (!paused) {
+      if (!pausedRef.current) {
         for (const n of nodes) {
           let fx = (.5 - n.x) * .25, fy = (.5 - n.y) * .25;
           for (const o of nodes) if (o !== n) {
@@ -94,7 +96,7 @@ export default function LiveMeshNetwork() {
         ctx.strokeStyle = `rgba(80,190,255,${.16 + energy * .5})`;
         ctx.lineWidth = 1 + energy;
         ctx.beginPath(); ctx.moveTo(a.x * w, a.y * h); ctx.lineTo(b.x * w, b.y * h); ctx.stroke();
-        if (energy > .55 && !paused) {
+        if (energy > .55 && !pausedRef.current) {
           const p = (now * .0008 + a.phase) % 1;
           ctx.fillStyle = "rgba(190,240,255,.9)"; ctx.beginPath();
           ctx.arc((a.x + (b.x - a.x) * p) * w, (a.y + (b.y - a.y) * p) * h, 2, 0, Math.PI * 2); ctx.fill();
@@ -122,9 +124,9 @@ export default function LiveMeshNetwork() {
     };
     raf = requestAnimationFrame(draw);
     return () => { cancelAnimationFrame(raf); observer.disconnect(); };
-  }, [topology, paused]);
+  }, [topology]);
 
-  const selectAt = (event: React.MouseEvent<HTMLCanvasElement>) => {
+  const selectAt = (event: MouseEvent<HTMLCanvasElement>) => {
     const canvas = event.currentTarget, r = canvas.getBoundingClientRect();
     const x = (event.clientX - r.left) / r.width, y = (event.clientY - r.top) / r.height;
     let best: Node | null = null, bestD = Infinity;
@@ -132,6 +134,7 @@ export default function LiveMeshNetwork() {
     if (best && bestD < .04) setSelected(best.id);
   };
 
+  const togglePause = () => setPaused(v => !v);
   const node = nodesRef.current.find(n => n.id === selected);
   const healthy = nodesRef.current.filter(n => n.health > .6).length;
 
@@ -144,7 +147,7 @@ export default function LiveMeshNetwork() {
     <div className="absolute bottom-3 left-3 right-3 rounded-lg border border-cyan-400/15 bg-black/75 p-3 text-[10px] text-cyan-100/75 backdrop-blur">
       <div className="flex items-center justify-between gap-2">
         <span>HEALTHY {healthy}/{ids.length} · TICK {tick}</span>
-        <button type="button" onClick={() => setPaused(v => !v)} className="pointer-events-auto rounded border border-cyan-400/25 px-2 py-1 text-cyan-100">{paused ? "Resume" : "Pause"}</button>
+        <button type="button" onClick={togglePause} className="pointer-events-auto rounded border border-cyan-400/25 px-2 py-1 text-cyan-100">{paused ? "Resume" : "Pause"}</button>
       </div>
       <div className="mt-2">{node ? `${names[node.id]} · health ${(node.health * 100).toFixed(0)}% · load ${(node.load * 100).toFixed(0)}%` : "Tap a node to inspect it"}</div>
     </div>
