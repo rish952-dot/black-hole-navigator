@@ -30,6 +30,12 @@ export default function MeshPage() {
         </div>
 
         <div className="flex shrink-0 items-center gap-1 rounded-lg border border-cyan-400/15 bg-black/50 p-1">
+          <Button asChild size="sm" variant="ghost" className="h-8 gap-1 px-2 text-[10px] font-mono uppercase text-cyan-100/45">
+            <Link to="/console">
+              <Activity className="h-3.5 w-3.5" />
+              Console
+            </Link>
+          </Button>
           <Button
             size="sm"
             variant="ghost"

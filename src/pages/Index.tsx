@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -330,6 +331,12 @@ const Index = () => {
           <Badge variant="outline" className="hidden border-primary/40 font-mono text-[10px] text-primary lg:inline-flex">
             r_s={r_s.toFixed(2)} · ISCO={r_isco.toFixed(2)} · γ={r_photon.toFixed(2)}
           </Badge>
+          <Button asChild size="sm" variant="outline" className="h-8 px-2 font-mono text-[10px] uppercase">
+            <Link to="/mesh">Mesh</Link>
+          </Button>
+          <Button asChild size="sm" variant="outline" className="h-8 px-2 font-mono text-[10px] uppercase">
+            <Link to="/console">Console</Link>
+          </Button>
           {!isMobile && view === "tunnels" && (
             <div className="hidden items-center gap-2 md:flex">
               <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
