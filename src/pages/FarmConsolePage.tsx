@@ -33,7 +33,8 @@ interface FleetBot {
   totals: { revenue: number; costs: number; netProfit: number; capital: number };
   diversity: number;
   halted: string | null;
-  last: { index: number; netProfit: number; bestFitness: number; bestAgentId: string; born: number; terminated: number } | null;
+  last: { index: number; netProfit: number; bestFitness: number; bestAgentId: string; born: number; terminated: number; cloned?: number; hunts?: number; accepted?: number } | null;
+  hunts?: { total: number; applications: number; accepted: number; recent: { agentId: string; title: string; stage: string; accepted: boolean; revenue: number }[] };
   pathways: { synapses: number; averageWeight: number; firings: number };
   updatedAt: string;
 }
@@ -126,6 +127,20 @@ function LiveFleetPanel() {
           {b.last && (
             <div className="mt-1 truncate font-mono text-[9px] text-cyan-300/40">
               best {b.last.bestAgentId} · fit {fmt(b.last.bestFitness)} · +{b.last.born}/-{b.last.terminated}
+              {typeof b.last.cloned === "number" && ` · cloned ${b.last.cloned}`}
+            </div>
+          )}
+          {b.hunts && (
+            <div className="mt-1 border-t border-cyan-400/10 pt-1">
+              <div className="font-mono text-[9px] text-cyan-300/55">
+                hunts {b.hunts.total} · applied {b.hunts.applications} · <span className="text-emerald-300/80">won {b.hunts.accepted}</span>
+              </div>
+              {b.hunts.recent.slice(0, 3).map((h, i) => (
+                <div key={i} className="truncate font-mono text-[8px] text-cyan-300/35">
+                  {h.accepted ? "✓" : h.stage === "skill-gap" ? "△" : "✗"} {h.agentId} → {h.title}
+                  {h.accepted && h.revenue > 0 && <span className="text-emerald-300/70"> +{fmt(h.revenue)}</span>}
+                </div>
+              ))}
             </div>
           )}
         </div>

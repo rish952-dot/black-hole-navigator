@@ -133,6 +133,22 @@ export interface GenerationRecord {
   born: number;
   fitnessFormula: string;
   meshField: MeshField;
+  hunts?: number;
+  applications?: number;
+  accepted?: number;
+  cloned?: number;
+}
+
+/** One pass through the active job-hunt pipeline for a single agent. */
+export interface HuntRecord {
+  agentId: string;
+  jobId: string;
+  title: string;
+  stage: "discover" | "eligibility" | "match" | "apply" | "follow-up" | "skill-gap" | "upskill" | "outcome";
+  score: number;
+  accepted: boolean;
+  revenue: number;
+  receiptId?: string;
 }
 
 /** Symbiotic link with the black hole / neural mesh simulator. */
@@ -165,6 +181,11 @@ export interface FarmConfig {
   autonomyRiskTolerance: number;
   autonomyMaxParallelism: number;
   autonomyAuditFrequency: number;
+  /** Max job hunts per agent per generation. */
+  huntsPerAgent: number;
+  /** Bottom fraction culled each generation; replaced by top-fraction clones. */
+  cullPct: number;
+  clonePct: number;
 }
 
 export const DEFAULT_CONFIG: FarmConfig = {
@@ -189,6 +210,9 @@ export const DEFAULT_CONFIG: FarmConfig = {
   autonomyRiskTolerance: 0.3,
   autonomyMaxParallelism: 2,
   autonomyAuditFrequency: 5,
+  huntsPerAgent: 3,
+  cullPct: 0.4,
+  clonePct: 0.1,
 };
 
 export const NEUTRAL_MESH: MeshField = {

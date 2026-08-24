@@ -40,6 +40,7 @@ interface BotStatus {
   diversity: number;
   halted: string | null;
   last: GenerationRecord | null;
+  hunts: { total: number; applications: number; accepted: number; recent: { agentId: string; title: string; stage: string; accepted: boolean; revenue: number }[] };
   pathways: { synapses: number; averageWeight: number; firings: number };
   updatedAt: string;
 }
@@ -84,6 +85,7 @@ let shuttingDown = false;
 function statusFor(bot: Bot): BotStatus {
   const snap = bot.engine.snapshot();
   const stats = bot.mind.pathways.stats();
+  const hunts = snap.hunts;
   return {
     botId: bot.id,
     mode,
@@ -93,6 +95,12 @@ function statusFor(bot: Bot): BotStatus {
     diversity: snap.diversity,
     halted: snap.halted,
     last: snap.generations[snap.generations.length - 1] ?? null,
+    hunts: {
+      total: hunts.length,
+      applications: hunts.filter((h) => h.stage !== "skill-gap").length,
+      accepted: hunts.filter((h) => h.accepted).length,
+      recent: hunts.slice(0, 6).map((h) => ({ agentId: h.agentId, title: h.title, stage: h.stage, accepted: h.accepted, revenue: h.revenue })),
+    },
     pathways: { synapses: stats.pathways, averageWeight: stats.averageWeight, firings: stats.totalActivations },
     updatedAt: new Date().toISOString(),
   };
