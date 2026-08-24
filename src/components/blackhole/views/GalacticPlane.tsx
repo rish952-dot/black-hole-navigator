@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { useFrame } from "@react-three/fiber";
+import { SafeCanvas } from "../SafeCanvas";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { Slider } from "@/components/ui/slider";
@@ -56,7 +57,7 @@ export function GalacticPlane({ className }: Props) {
         className,
       )}
     >
-      <Canvas
+      <SafeCanvas
         gl={{ antialias: true, powerPreference: "high-performance" }}
         dpr={[1, isMobile ? 1.2 : 1.6]}
         camera={{ position: [0, 30, 50], fov: 55 }}
@@ -82,7 +83,7 @@ export function GalacticPlane({ className }: Props) {
           maxDistance={200}
           touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
         />
-      </Canvas>
+      </SafeCanvas>
 
       {/* Top label */}
       <div className="pointer-events-none absolute left-3 top-3 space-y-1">

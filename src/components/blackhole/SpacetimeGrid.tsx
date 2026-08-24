@@ -1,5 +1,6 @@
 import { useMemo, useRef } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { useFrame } from "@react-three/fiber";
+import { SafeCanvas } from "./SafeCanvas";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { cn } from "@/lib/utils";
@@ -47,7 +48,7 @@ export function SpacetimeGrid({
         className,
       )}
     >
-      <Canvas
+      <SafeCanvas
         gl={{ antialias: true, powerPreference: "high-performance" }}
         dpr={[1, 1.6]}
         camera={{ position: [22, 14, 22], fov: 55 }}
@@ -77,7 +78,7 @@ export function SpacetimeGrid({
           maxDistance={120}
           touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
         />
-      </Canvas>
+      </SafeCanvas>
       <div className="pointer-events-none absolute left-3 top-3 space-y-1">
         <div className="rounded border border-secondary/40 bg-black/60 px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-secondary">
           4D · Flamm embedding · {starCount} entities

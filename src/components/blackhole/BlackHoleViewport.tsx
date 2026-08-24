@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type PointerEvent as RPointerEvent } from "react";
-import { Canvas } from "@react-three/fiber";
+import { SafeCanvas } from "./SafeCanvas";
 import { BlackHoleQuad, type BlackHoleParams } from "./BlackHoleQuad";
 import { StreamlineOverlay } from "./StreamlineOverlay";
 import { cn } from "@/lib/utils";
@@ -148,13 +148,13 @@ export function BlackHoleViewport({
         className,
       )}
     >
-      <Canvas
+      <SafeCanvas
         gl={{ antialias: false, powerPreference: "high-performance" }}
         dpr={[1, 1.5]}
         camera={{ position: [0, 0, 5], fov: 50 }}
       >
         <BlackHoleQuad params={params} />
-      </Canvas>
+      </SafeCanvas>
 
       {streamlines && (
         <StreamlineOverlay

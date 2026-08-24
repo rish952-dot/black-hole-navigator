@@ -129,6 +129,7 @@ export const createDefaultDepartmentMesh = (): DepartmentMesh => {
     ["central-mind", "observability"],
     ["hive", "ai"],
     ["ai", "execution"],
+    ["jobs", "execution"],
     ["execution", "evolution"],
     ["evolution", "finance"],
     ["finance", "jobs"],

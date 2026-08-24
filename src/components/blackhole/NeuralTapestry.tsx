@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
+import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
+import { SafeCanvas } from "./SafeCanvas";
 import { OrbitControls } from "@react-three/drei";
 import {
   EffectComposer,
@@ -398,7 +399,7 @@ export function NeuralTapestry({
 
   return (
     <div className={cn("relative h-full w-full overflow-hidden rounded-lg border border-border bg-black", className)}>
-      <Canvas gl={{ antialias: true, powerPreference: "high-performance", toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.15 }} dpr={[1, isMobile ? 1.2 : 1.6]} camera={{ position: [0, 0, 50], fov: 50 }}>
+      <SafeCanvas gl={{ antialias: true, powerPreference: "high-performance", toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.15 }} dpr={[1, isMobile ? 1.2 : 1.6]} camera={{ position: [0, 0, 50], fov: 50 }}>
         <color attach="background" args={["#020410"]} />
         <ambientLight intensity={0.6} />
         {layers.fourD && topoCtl.enabled && <MeshTopographyLayer field={topoField} influences={influences} resolution={lod.topoResolution} updateInterval={lod.topoUpdateInterval} wireframe={layers.debug} />}
@@ -427,7 +428,7 @@ export function NeuralTapestry({
             <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
           </EffectComposer>
         )}
-      </Canvas>
+      </SafeCanvas>
       <div className="pointer-events-none absolute left-3 top-3 space-y-1">
         <div className="rounded border border-secondary/40 bg-black/60 px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-secondary">Tapestry · {count.toLocaleString()} params</div>
         <div className="rounded border border-border bg-black/60 px-2 py-1 font-mono text-[10px] text-muted-foreground">edges {errorInfo.total.toLocaleString()} · <span className="text-destructive">broken {errorInfo.broken}</span></div>

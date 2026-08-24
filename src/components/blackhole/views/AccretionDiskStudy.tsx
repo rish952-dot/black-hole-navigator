@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, useCallback } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { useFrame } from "@react-three/fiber";
+import { SafeCanvas } from "../SafeCanvas";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import {
@@ -109,7 +110,7 @@ export function AccretionDiskStudy({
           <div className="grid gap-3 md:grid-cols-2">
             {/* 3D disk visualization */}
             <div className="relative h-[280px] overflow-hidden rounded-lg border border-border bg-black">
-              <Canvas
+              <SafeCanvas
                 gl={{ antialias: true, powerPreference: "high-performance" }}
                 dpr={[1, 1.5]}
                 camera={{ position: [0, 12, 22], fov: 50 }}
@@ -133,7 +134,7 @@ export function AccretionDiskStudy({
                   maxDistance={80}
                   touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
                 />
-              </Canvas>
+              </SafeCanvas>
               <div className="pointer-events-none absolute left-3 top-3">
                 <Badge variant="outline" className="border-secondary/50 font-mono text-[10px] text-secondary">
                   Thin-disk · a={spin.toFixed(2)}
