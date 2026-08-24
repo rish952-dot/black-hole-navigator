@@ -13,6 +13,7 @@ on:
     paths:
       - 'src/**'
       - 'package.json'
+      - 'bun.lock'
       - 'bun.lockb'
       - 'vite.config.*'
       - '.github/workflows/**'
@@ -28,6 +29,7 @@ concurrency:
 
 jobs:
   qwen-audit:
+    if: ${{ secrets.QWEN_API_KEY != '' || secrets.DASHSCOPE_API_KEY != '' || secrets.OPENAI_API_KEY != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -35,10 +37,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Verify Qwen credentials
+        env:
+          QWEN_KEY: ${{ secrets.QWEN_API_KEY || secrets.DASHSCOPE_API_KEY || secrets.OPENAI_API_KEY }}
+        run: test -n "$QWEN_KEY"
+
       - name: Qwen Code audit and safe fixes
         uses: QwenLM/qwen-code-action@v1
         with:
-          openai_api_key: ${{ secrets.QWEN_API_KEY }}
+          openai_api_key: ${{ secrets.QWEN_API_KEY || secrets.DASHSCOPE_API_KEY || secrets.OPENAI_API_KEY }}
           openai_base_url: ${{ vars.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1' }}
           openai_model: ${{ vars.QWEN_MODEL || 'qwen-coder-plus-latest' }}
           qwen_cli_version: ${{ vars.QWEN_CLI_VERSION || 'latest' }}
@@ -62,3 +69,12 @@ jobs:
 
             Current requested task: ${{ inputs.task || 'Audit the mesh architecture, frontend, backend integration, tests, and deployment. Fix safe bugs and report anything requiring secrets or manual infrastructure.' }}
           upload_artifacts: 'false'
+
+  qwen-disabled:
+    if: ${{ secrets.QWEN_API_KEY == '' && secrets.DASHSCOPE_API_KEY == '' && secrets.OPENAI_API_KEY == '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain disabled audit
+        run: |
+          echo 'Qwen audit skipped: no QWEN_API_KEY, DASHSCOPE_API_KEY, or OPENAI_API_KEY repository secret is configured.'
+          echo 'Configure one of those secrets to enable the autonomous Qwen audit.'
