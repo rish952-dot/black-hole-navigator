@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { appendFile, mkdir } from "node:fs/promises";
 import { Contract, JsonRpcProvider, Wallet, getAddress, parseEther, parseUnits } from "ethers";
 
 /**
@@ -72,7 +72,8 @@ try {
 } catch {
   // Missing state file is expected on the first run.
 }
-const audit = async (entry: Record<string, unknown>) => { await Bun.write(auditFile, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`, { createPath: true, append: true }); };
+// Bun.write has no working append mode; appendFile keeps the audit trail intact.
+const audit = async (entry: Record<string, unknown>) => { await appendFile(auditFile, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`); };
 
 if (!real || dryRun) { console.log(JSON.stringify({ status: real ? "REAL_DRY_RUN" : "DISABLED", destination, asset, chainId, revenue: round(revenue), costs: round(costs), netProfit: round(netProfit), payoutPool: round(payoutPool), payouts, transferredToday: state.transferred, maxDaily }, null, 2)); process.exit(0); }
 

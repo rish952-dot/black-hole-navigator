@@ -68,3 +68,5 @@ main().catch((error) => {
   console.error("[repair] fatal:", error instanceof Error ? error.message : String(error));
   process.exit(1);
 });
+
+export {};

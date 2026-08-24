@@ -238,3 +238,5 @@ await Bun.write("ai-mesh-full-stress.md", [
 ].join("\n"));
 
 console.log(JSON.stringify(report, null, 2));
+
+export {};

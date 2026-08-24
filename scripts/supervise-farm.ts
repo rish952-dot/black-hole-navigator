@@ -43,3 +43,5 @@ await Bun.write("farm-supervisor.json", JSON.stringify(summary, null, 2));
 console.log(JSON.stringify(summary, null, 2));
 
 if (failed > 0) process.exit(1);
+
+export {};

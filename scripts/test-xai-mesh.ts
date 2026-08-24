@@ -116,3 +116,5 @@ await Bun.write(
   `# xAI Mesh Test\n\n- Status: ${result.status}\n- Model: ${model}\n- Nodes: 2\n- Communication: vector_only\n- Valid vectors: ${results.length}\n- Time: ${elapsedMs} ms\n\nNo financial or external-account actions were performed.\n`,
 );
 console.log(JSON.stringify(result, null, 2));
+
+export {};
