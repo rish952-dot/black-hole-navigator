@@ -25,6 +25,115 @@ import type { HiveNode } from "@/farm/hive-topology";
 
 type LogEntry = { ts: string; text: string; tone: "info" | "good" | "bad" };
 
+interface FleetBot {
+  botId: number;
+  mode: string;
+  generation: number;
+  agents: number;
+  totals: { revenue: number; costs: number; netProfit: number; capital: number };
+  diversity: number;
+  halted: string | null;
+  last: { index: number; netProfit: number; bestFitness: number; bestAgentId: string; born: number; terminated: number } | null;
+  pathways: { synapses: number; averageWeight: number; firings: number };
+  updatedAt: string;
+}
+
+interface FleetStatus {
+  mode: string;
+  tickMs: number;
+  startedAt: string;
+  publishedAt: string;
+  bots: FleetBot[];
+  payout?: {
+    status: string;
+    chain: string;
+    address: string | null;
+    asset: string;
+    share: number;
+    proposals: { botId: number; amount: number }[];
+    totalProposed: number;
+  };
+}
+
+function LiveFleetPanel() {
+  const [fleet, setFleet] = useState<FleetStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/farm-live/fleet-status.json?ts=${Date.now()}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as FleetStatus;
+        if (alive) { setFleet(data); setError(null); }
+      } catch (e) {
+        if (alive) setError(e instanceof Error ? e.message : String(e));
+      }
+    };
+    poll();
+    const id = window.setInterval(poll, 5000);
+    return () => { alive = false; window.clearInterval(id); };
+  }, []);
+
+  if (error && !fleet) {
+    return (
+      <div className="font-mono text-[10px] text-cyan-300/40">
+        fleet offline — start with: bun scripts/deploy-farm-live.ts ({error})
+      </div>
+    );
+  }
+  if (!fleet) return <div className="font-mono text-[10px] text-cyan-300/40">contacting fleet…</div>;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between font-mono text-[9px] uppercase tracking-[0.14em] text-cyan-300/45">
+        <span>{fleet.mode} · tick {fleet.tickMs}ms</span>
+        <span>{new Date(fleet.publishedAt).toLocaleTimeString()}</span>
+      </div>
+      {fleet.payout && (
+        <div className="rounded-md border border-amber-400/20 bg-amber-500/5 p-2 font-mono text-[9px]">
+          <div className="flex items-center justify-between text-amber-300/80">
+            <span>PAYOUT ({fleet.payout.status})</span>
+            <span>{fleet.payout.asset}</span>
+          </div>
+          <div className="mt-0.5 truncate text-amber-100/60">
+            → {fleet.payout.address ?? "no destination recorded"}
+          </div>
+          <div className="mt-0.5 text-amber-100/60">
+            proposed {fmt(fleet.payout.totalProposed)} {fleet.payout.asset} · share {fleet.payout.share} · paper only, no funds moved
+          </div>
+        </div>
+      )}
+      {fleet.bots.map((b) => (
+        <div key={b.botId} className="rounded-md border border-cyan-400/10 bg-black/50 p-2">
+          <div className="flex items-center justify-between font-mono text-[10px]">
+            <span className="text-cyan-100/85">bot-{b.botId}</span>
+            {b.halted ? (
+              <span className="text-red-300">HALTED</span>
+            ) : (
+              <span className="text-emerald-300/80">gen {b.generation}</span>
+            )}
+          </div>
+          <div className="mt-1 grid grid-cols-3 gap-1 font-mono text-[9px] text-cyan-300/55">
+            <span>agents {b.agents}</span>
+            <span className={b.totals.netProfit >= 0 ? "text-emerald-300" : "text-red-300"}>net {fmt(b.totals.netProfit)}</span>
+            <span>div {b.diversity.toFixed(2)}</span>
+            <span>syn {b.pathways.synapses}</span>
+            <span>w {b.pathways.averageWeight.toFixed(2)}</span>
+            <span>fire {b.pathways.firings}</span>
+          </div>
+          {b.last && (
+            <div className="mt-1 truncate font-mono text-[9px] text-cyan-300/40">
+              best {b.last.bestAgentId} · fit {fmt(b.last.bestFitness)} · +{b.last.born}/-{b.last.terminated}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const HIVE_ROLES = ["queen", "specialist", "worker", "worker", "scout", "worker"] as const;
 
 const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -350,7 +459,15 @@ export default function FarmConsolePage() {
         </section>
 
         {/* Neural pathways + central mind */}
-        <section className="flex min-h-0 flex-col gap-2 md:gap-3">
+        <section className="flex min-h-0 flex-col gap-2 overflow-y-auto md:gap-3">
+          <div className="rounded-lg border border-emerald-400/15 bg-black/35 p-3">
+            <div className="mb-2 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.16em] text-emerald-300/70">
+              <span className="flex items-center gap-2"><Cpu className="h-3.5 w-3.5" /> Live bot fleet</span>
+              <span className="text-[8px] text-emerald-300/40">deployed processes</span>
+            </div>
+            <LiveFleetPanel />
+          </div>
+
           <div className="rounded-lg border border-cyan-400/10 bg-black/35 p-3">
             <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-cyan-300/60">
               <Brain className="h-3.5 w-3.5" /> Neural pathways
