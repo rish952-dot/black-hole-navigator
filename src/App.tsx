@@ -7,6 +7,7 @@ import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import MeshPage from "./pages/MeshPage.tsx";
 import FarmConsolePage from "./pages/FarmConsolePage.tsx";
+import DevelopmentPage from "./pages/DevelopmentPage.tsx";
 
 const queryClient = new QueryClient();
 
@@ -20,6 +21,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/mesh" element={<MeshPage />} />
           <Route path="/console" element={<FarmConsolePage />} />
+          <Route path="/development" element={<DevelopmentPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

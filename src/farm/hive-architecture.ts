@@ -67,6 +67,7 @@ export class HiveArchitecture {
   private messages: InterAgentMessage[] = [];
   private deposits: Deposit[] = [];
   private accountBalance = 0;
+  private spendingLimit = 100;
   private paused = false;
   private readonly decisions: PolicyDecision[] = [];
 
@@ -157,6 +158,23 @@ export class HiveArchitecture {
     if (approved) this.accountBalance = money(this.accountBalance + d.amount);
     return d;
   }
+
+  /** Financial gate: blocked spending limits, checked before any release. */
+  authorize(amount: number): void {
+    if (amount > this.spendingLimit) {
+      throw new Error(`Transaction of ${amount} exceeds limit ${this.spendingLimit}`);
+    }
+  }
+
+  setSpendingLimit(limit: number): void {
+    this.spendingLimit = limit;
+  }
+
+  getSpendingLimit(): number {
+    return this.spendingLimit;
+  }
+
+  /* ---- Autonomous performance review across every embedded worker ---- */
 
   /** Autonomous performance review across every embedded worker. */
   review() {
