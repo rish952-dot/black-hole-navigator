@@ -35,6 +35,12 @@ interface FleetBot {
   halted: string | null;
   last: { index: number; netProfit: number; bestFitness: number; bestAgentId: string; born: number; terminated: number; cloned?: number; hunts?: number; accepted?: number } | null;
   hunts?: { total: number; applications: number; accepted: number; recent: { agentId: string; title: string; stage: string; accepted: boolean; revenue: number }[] };
+  hive?: {
+    paused: boolean;
+    account: { balance: number; pending: number };
+    layers: { id: string; role: string; nodes: string[]; canWork: boolean }[];
+    traffic: { vectors: number };
+  } | null;
   pathways: { synapses: number; averageWeight: number; firings: number };
   updatedAt: string;
 }
@@ -169,6 +175,21 @@ function LiveFleetPanel() {
                   {h.accepted && h.revenue > 0 && <span className="text-emerald-300/70"> +{fmt(h.revenue)}</span>}
                 </div>
               ))}
+            </div>
+          )}
+          {b.hive && b.hive.layers?.length > 0 && (
+            <div className="mt-1 border-t border-violet-400/10 pt-1">
+              <div className="font-mono text-[9px] text-violet-300/55">
+                HIVE · {b.hive.paused ? "paused" : "autonomous"} · vectors {b.hive.traffic?.vectors ?? 0}
+              </div>
+              <div className="space-y-0">
+                {b.hive.layers.map((l) => (
+                  <div key={l.id} className="flex justify-between font-mono text-[8px] text-violet-200/40">
+                    <span className="uppercase">{l.id}</span>
+                    <span>{l.nodes.length} node{l.nodes.length === 1 ? "" : "s"}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>

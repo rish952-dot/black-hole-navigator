@@ -2,9 +2,10 @@ import { mkdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { FarmEngine } from "../src/farm/engine";
 import { CentralMind } from "../src/farm/central-mind";
+import { HiveArchitecture } from "../src/farm/hive-architecture";
 import { discoverRealContracts, type HuntDiscovery } from "../src/farm/hunt-sources";
 import { DEFAULT_CONFIG, NEUTRAL_MESH, type DeploymentMode, type GenerationRecord } from "../src/farm/types";
-import type { HiveNode } from "../src/farm/hive-topology";
+import type { HiveNode, HiveRole } from "../src/farm/hive-topology";
 
 // Live fleet daemon: runs real bot processes continuously and publishes
 // honest snapshots the console UI can poll. Settlement is PAPER_MODE only —
@@ -42,6 +43,7 @@ interface BotStatus {
   halted: string | null;
   last: GenerationRecord | null;
   hunts: { total: number; applications: number; accepted: number; recent: { agentId: string; title: string; stage: string; accepted: boolean; revenue: number }[] };
+  hive: ReturnType<HiveArchitecture["snapshot"]> | null;
   pathways: { synapses: number; averageWeight: number; firings: number };
   updatedAt: string;
 }
@@ -62,12 +64,6 @@ function makeNode(botId: number, i: number): HiveNode {
   };
 }
 
-interface Bot {
-  id: number;
-  engine: FarmEngine;
-  mind: CentralMind;
-}
-
 const bots: Bot[] = Array.from({ length: botCount }, (_, botId) => {
   const engine = new FarmEngine({
     ...DEFAULT_CONFIG,
@@ -76,10 +72,17 @@ const bots: Bot[] = Array.from({ length: botCount }, (_, botId) => {
     opportunitiesPerGen,
     mode,
   });
-  const mind = new CentralMind({ paymentMode: "paper" });
-  for (let i = 0; i < 4; i++) mind.addNode(makeNode(botId, i));
-  return { id: botId, engine, mind };
+  const arch = new HiveArchitecture(new CentralMind({ paymentMode: "paper" }));
+  for (let i = 0; i < 4; i++) arch.embed(makeNode(botId, i));
+  return { id: botId, engine, mind: arch.mind, arch };
 });
+
+interface Bot {
+  id: number;
+  engine: FarmEngine;
+  mind: CentralMind;
+  arch?: HiveArchitecture;
+}
 
 let shuttingDown = false;
 
@@ -103,6 +106,7 @@ function statusFor(bot: Bot): BotStatus {
       recent: hunts.slice(0, 6).map((h) => ({ agentId: h.agentId, title: h.title, stage: h.stage, accepted: h.accepted, revenue: h.revenue })),
     },
     pathways: { synapses: stats.pathways, averageWeight: stats.averageWeight, firings: stats.totalActivations },
+    hive: bot.arch?.snapshot() ?? null,
     updatedAt: new Date().toISOString(),
   };
 }
