@@ -19,8 +19,8 @@ export const PUB_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string |
 export const BACKEND_CONFIGURED = !!FN_BASE;
 
 export type FnResult<T> =
-  | { ok: true; data: T; status: number }
-  | { ok: false; error: string; status: number };
+  | { ok: true; data: T; error?: undefined; status: number }
+  | { ok: false; error: string; data?: undefined; status: number };
 
 export async function callFunction<T>(
   name: string,
