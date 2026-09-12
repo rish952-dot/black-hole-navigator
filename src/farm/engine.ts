@@ -4,7 +4,7 @@ import { auditAgent, computeFitness } from "./fitness";
 import { Ledger } from "./ledger";
 import { SyntheticMarketplace } from "./marketplace";
 import { RNG } from "./rng";
-import { NEUTRAL_MESH, type Agent, type FarmConfig, type GenerationRecord, type MeshField, type TaskRecord } from "./types";
+import { NEUTRAL_MESH, type Agent, type FarmConfig, type GenerationRecord, type MeshField, type Opportunity, type TaskRecord } from "./types";
 
 export interface FarmSnapshot {
   generation: number;
