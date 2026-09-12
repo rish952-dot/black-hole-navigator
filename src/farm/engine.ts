@@ -31,6 +31,8 @@ export class FarmEngine {
   tasks: TaskRecord[] = [];
   generation = 0;
   halted: string | null = null;
+  /** Optional role-aware task allocator installed by the controller. */
+  allocator: ((ops: Opportunity[], agents: Agent[]) => Map<string, Opportunity[]>) | null = null;
   private totalRevenue = 0;
   private totalCosts = 0;
 
@@ -71,10 +73,13 @@ export class FarmEngine {
       a.stats = { ...emptyStats(), flagged: [] };
     }
 
-    // Round-robin opportunity offering: each agent sees a slice of the market.
+    // Opportunity offering. An optional allocator (role/lifecycle aware) may
+    // override the default round-robin slicing; behaviour is identical when
+    // no allocator is installed.
     const perAgent = Math.max(1, Math.floor(ops.length / Math.max(1, this.agents.length)));
+    const plan = this.allocator ? this.allocator(ops, this.agents) : null;
     this.agents.forEach((a, idx) => {
-      const slice = ops.slice(idx * perAgent, idx * perAgent + perAgent);
+      const slice = plan ? (plan.get(a.id) ?? []) : ops.slice(idx * perAgent, idx * perAgent + perAgent);
       const nets: number[] = [];
       let offered = 0;
       for (const op of slice) {
