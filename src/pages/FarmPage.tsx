@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import { BackendStatus } from "@/components/BackendStatus";
+import { useBackendHealth } from "@/hooks/useBackendHealth";
 import { NavLink } from "@/components/NavLink";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,8 +44,12 @@ function Sparkline({ values }: { values: number[] }) {
 }
 
 export default function FarmPage() {
-  const { config, setConfig, snapshot, running, setRunning, speedMs, setSpeedMs, step, reset, lineages, field } =
-    useFarm();
+  const {
+    config, setConfig, snapshot, state, running, setRunning, speedMs, setSpeedMs, step, reset, lineages, field,
+    save, restore, persist, persistError, lastSaved, isMobile,
+  } = useFarm();
+  const health = useBackendHealth();
+  const rowLimit = isMobile ? 40 : 120;
 
   const ranked = useMemo(
     () => [...snapshot.agents].sort((a, b) => b.stats.fitness - a.stats.fitness),
