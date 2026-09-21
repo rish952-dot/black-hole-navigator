@@ -2,12 +2,15 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { NeuralTapestry } from "@/components/blackhole/NeuralTapestry";
+import { BackendStatus } from "@/components/BackendStatus";
+import { useBackendHealth } from "@/hooks/useBackendHealth";
 
 /**
  * Dedicated full-screen Neural I/O Mesh inspector.
  * Touch-navigable. Shows every parameter, every connection.
  */
 export default function MeshPage() {
+  const health = useBackendHealth();
   return (
     <main className="flex h-screen w-full flex-col overflow-hidden bg-background text-foreground">
       <header className="flex flex-shrink-0 items-center justify-between border-b border-border px-3 py-2 md:px-6 md:py-3">
@@ -27,6 +30,8 @@ export default function MeshPage() {
             </p>
           </div>
         </div>
+        <div className="flex items-center gap-2">
+        <BackendStatus health={health} compact />
         <Button asChild size="sm" variant="outline" className="h-8 px-3">
           <Link to="/farm">
             <span className="font-mono text-xs">Agent Farm</span>
