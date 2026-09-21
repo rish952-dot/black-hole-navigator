@@ -37,6 +37,7 @@ export default function MeshPage() {
             <span className="font-mono text-xs">Agent Farm</span>
           </Link>
         </Button>
+        </div>
       </header>
       <div className="flex-1 overflow-hidden p-2 md:p-3">
         <NeuralTapestry className="h-full" />
