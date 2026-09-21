@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import { BackendStatus } from "@/components/BackendStatus";
+import { useBackendHealth } from "@/hooks/useBackendHealth";
 import { NavLink } from "@/components/NavLink";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,8 +44,12 @@ function Sparkline({ values }: { values: number[] }) {
 }
 
 export default function FarmPage() {
-  const { config, setConfig, snapshot, running, setRunning, speedMs, setSpeedMs, step, reset, lineages, field } =
-    useFarm();
+  const {
+    config, setConfig, snapshot, state, running, setRunning, speedMs, setSpeedMs, step, reset, lineages, field,
+    save, restore, persist, persistError, lastSaved, isMobile, runKey,
+  } = useFarm();
+  const health = useBackendHealth();
+  const rowLimit = isMobile ? 40 : 120;
 
   const ranked = useMemo(
     () => [...snapshot.agents].sort((a, b) => b.stats.fitness - a.stats.fitness),
@@ -59,6 +65,7 @@ export default function FarmPage() {
       <header className="border-b border-border/60 px-4 py-3 flex flex-wrap items-center gap-3">
         <h1 className="text-sm font-mono uppercase tracking-[0.3em] text-primary">Evolutionary Agent Farm</h1>
         <Badge variant="outline" className="font-mono text-[10px]">{config.mode}</Badge>
+        <BackendStatus health={health} compact />
         <nav className="ml-auto flex gap-3 text-xs text-muted-foreground">
           <NavLink to="/" className="hover:text-foreground" activeClassName="text-foreground">Home</NavLink>
           <NavLink to="/mesh" className="hover:text-foreground" activeClassName="text-foreground">Mesh</NavLink>
@@ -73,6 +80,19 @@ export default function FarmPage() {
           Step generation
         </Button>
         <Button size="sm" variant="ghost" onClick={() => reset(config)}>Reset</Button>
+        <Button size="sm" variant="outline" onClick={() => void save()} disabled={persist === "saving"}>
+          {persist === "saving" ? "Saving…" : "Save run"}
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => void restore()} disabled={persist === "loading"}>
+          {persist === "loading" ? "Loading…" : "Restore"}
+        </Button>
+        <span className="text-[10px] font-mono text-muted-foreground">
+          {persist === "error"
+            ? `save unavailable — running locally (${persistError ?? "offline"})`
+            : lastSaved
+              ? `saved ${new Date(lastSaved).toLocaleTimeString()}`
+              : ""}
+        </span>
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground ml-2 w-48">
           <span>Speed</span>
           <Slider
@@ -105,7 +125,7 @@ export default function FarmPage() {
 
       <Tabs defaultValue="overview" className="px-4 pb-10">
         <TabsList className="flex-wrap h-auto">
-          {["overview", "agents", "generations", "lineages", "tasks", "ledger", "config"].map((t) => (
+          {["overview", "agents", "roles", "mesh", "metrics", "health", "generations", "lineages", "tasks", "ledger", "config"].map((t) => (
             <TabsTrigger key={t} value={t} className="capitalize text-xs">{t}</TabsTrigger>
           ))}
         </TabsList>
@@ -145,7 +165,7 @@ export default function FarmPage() {
                 ))}</tr>
               </thead>
               <tbody>
-                {ranked.slice(0, 120).map((a, i) => (
+                {ranked.slice(0, rowLimit).map((a, i) => (
                   <tr key={a.id} className="border-t border-border/40">
                     <td className="px-2 py-1 text-muted-foreground">{i + 1}</td>
                     <td className="px-2 py-1">{a.id}</td>
@@ -218,7 +238,7 @@ export default function FarmPage() {
                 ))}</tr>
               </thead>
               <tbody>
-                {snapshot.tasks.map((t) => (
+                {snapshot.tasks.slice(0, isMobile ? 60 : 300).map((t) => (
                   <tr key={t.id} className="border-t border-border/40">
                     <td className="px-2 py-1">{t.agentId}</td>
                     <td className="px-2 py-1 text-muted-foreground">{t.category}</td>
@@ -257,6 +277,70 @@ export default function FarmPage() {
               </tbody>
             </table>
           </div>
+        </TabsContent>
+
+        <TabsContent value="roles" className="pt-4 grid sm:grid-cols-2 md:grid-cols-3 gap-3">
+          {Object.entries(state.roleHistogram).map(([role, count]) => (
+            <Card key={role} className="p-3">
+              <div className="flex justify-between text-xs font-mono">
+                <span className="text-primary capitalize">{role}</span>
+                <span className="text-muted-foreground">{count}</span>
+              </div>
+              <Progress className="mt-2 h-1" value={Math.min(100, (count / Math.max(1, snapshot.agents.length)) * 100)} />
+            </Card>
+          ))}
+          <Card className="p-3 font-mono text-[11px] text-muted-foreground">
+            recoveries {state.recoveries} · unassigned {state.unassigned}
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="mesh" className="pt-4 grid md:grid-cols-4 gap-3">
+          <Stat label="Nodes" value={`${state.topology.vectors.size}`} />
+          <Stat label="Links" value={`${state.topology.links.length}`} />
+          <Stat label="Avg degree" value={state.topology.avgDegree.toFixed(2)} />
+          <Stat label="Clusters" value={`${state.topology.components}`} hint={`clustering ${state.topology.clustering.toFixed(2)}`} />
+        </TabsContent>
+
+        <TabsContent value="metrics" className="pt-4">
+          {state.metrics ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {Object.entries(state.metrics).map(([k, v]) => (
+                <Card key={k} className="p-3">
+                  <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">{k}</div>
+                  <div className="font-mono text-sm">{typeof v === "number" ? v.toFixed(3) : String(v)}</div>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="text-xs text-muted-foreground">Run a generation to collect metrics.</div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="health" className="pt-4 grid md:grid-cols-2 gap-3">
+          <Card className="p-4 space-y-2">
+            <div className="text-xs text-muted-foreground">Farm health</div>
+            {state.health ? (
+              <>
+                <div className="font-mono text-2xl">{state.health.score}<span className="text-sm text-muted-foreground">/100</span></div>
+                <Badge variant="outline" className="font-mono text-[10px]">{state.health.level}</Badge>
+                <ul className="text-[11px] font-mono text-muted-foreground space-y-1">
+                  {[...state.health.farm.issues, ...state.health.mesh.issues].map((i) => (
+                    <li key={i}>· {i}</li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <div className="text-xs text-muted-foreground">No report yet.</div>
+            )}
+          </Card>
+          <Card className="p-4 space-y-2 font-mono text-[11px] text-muted-foreground">
+            <div className="text-xs text-foreground">Backend</div>
+            <BackendStatus health={health} />
+            <div>run key: {runKey}</div>
+            <div>mode: {config.mode}{state.modeNotice ? ` — ${state.modeNotice}` : ""}</div>
+            <div>real-money execution: disabled (fail-closed)</div>
+            {health.payload && <div>db latency: {health.payload.services.database.latencyMs}ms</div>}
+          </Card>
         </TabsContent>
 
         <TabsContent value="config" className="pt-4 grid md:grid-cols-2 gap-4">
