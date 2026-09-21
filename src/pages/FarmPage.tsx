@@ -65,6 +65,7 @@ export default function FarmPage() {
       <header className="border-b border-border/60 px-4 py-3 flex flex-wrap items-center gap-3">
         <h1 className="text-sm font-mono uppercase tracking-[0.3em] text-primary">Evolutionary Agent Farm</h1>
         <Badge variant="outline" className="font-mono text-[10px]">{config.mode}</Badge>
+        <BackendStatus health={health} compact />
         <nav className="ml-auto flex gap-3 text-xs text-muted-foreground">
           <NavLink to="/" className="hover:text-foreground" activeClassName="text-foreground">Home</NavLink>
           <NavLink to="/mesh" className="hover:text-foreground" activeClassName="text-foreground">Mesh</NavLink>
@@ -79,6 +80,19 @@ export default function FarmPage() {
           Step generation
         </Button>
         <Button size="sm" variant="ghost" onClick={() => reset(config)}>Reset</Button>
+        <Button size="sm" variant="outline" onClick={() => void save()} disabled={persist === "saving"}>
+          {persist === "saving" ? "Saving…" : "Save run"}
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => void restore()} disabled={persist === "loading"}>
+          {persist === "loading" ? "Loading…" : "Restore"}
+        </Button>
+        <span className="text-[10px] font-mono text-muted-foreground">
+          {persist === "error"
+            ? `save unavailable — running locally (${persistError ?? "offline"})`
+            : lastSaved
+              ? `saved ${new Date(lastSaved).toLocaleTimeString()}`
+              : ""}
+        </span>
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground ml-2 w-48">
           <span>Speed</span>
           <Slider
