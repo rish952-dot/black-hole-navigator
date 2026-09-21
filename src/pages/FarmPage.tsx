@@ -46,7 +46,7 @@ function Sparkline({ values }: { values: number[] }) {
 export default function FarmPage() {
   const {
     config, setConfig, snapshot, state, running, setRunning, speedMs, setSpeedMs, step, reset, lineages, field,
-    save, restore, persist, persistError, lastSaved, isMobile,
+    save, restore, persist, persistError, lastSaved, isMobile, runKey,
   } = useFarm();
   const health = useBackendHealth();
   const rowLimit = isMobile ? 40 : 120;
@@ -295,7 +295,7 @@ export default function FarmPage() {
         </TabsContent>
 
         <TabsContent value="mesh" className="pt-4 grid md:grid-cols-4 gap-3">
-          <Stat label="Nodes" value={`${state.topology.nodes.length}`} />
+          <Stat label="Nodes" value={`${state.topology.vectors.size}`} />
           <Stat label="Links" value={`${state.topology.links.length}`} />
           <Stat label="Avg degree" value={state.topology.avgDegree.toFixed(2)} />
           <Stat label="Clusters" value={`${state.topology.components}`} hint={`clustering ${state.topology.clustering.toFixed(2)}`} />
@@ -336,7 +336,7 @@ export default function FarmPage() {
           <Card className="p-4 space-y-2 font-mono text-[11px] text-muted-foreground">
             <div className="text-xs text-foreground">Backend</div>
             <BackendStatus health={health} />
-            <div>run key: {useFarmRunKeyLabel(state)}</div>
+            <div>run key: {runKey}</div>
             <div>mode: {config.mode}{state.modeNotice ? ` — ${state.modeNotice}` : ""}</div>
             <div>real-money execution: disabled (fail-closed)</div>
             {health.payload && <div>db latency: {health.payload.services.database.latencyMs}ms</div>}
