@@ -12,3 +12,10 @@
 - [ ] Tests for controller, persistence, health
 - [ ] typecheck + tests + production build
 - [ ] Verify deployed health and farm-state save/load, then publish
+
+## Payouts (Stripe Connect)
+- [ ] Admin sign-in + roles
+- [ ] Payout tables + capped server function + client adapter
+- [ ] Wire Payouts section into Farm Config
+- [ ] Raise payout caps (per user request)
+- [ ] Cloudflare security blueprint (WAF, rate limits, bot rules on custom domain)
