@@ -4,11 +4,28 @@ Payouts go from your Stripe balance to connected accounts, triggered by the Farm
 
 ## Safety caps (enforced on the server, not changeable from the browser)
 
-- Per payout: max $25
-- Auto-approve only at or below $10; above that it's queued for manual approval
-- Per day: max $100 total across all payouts
-- Lifetime: max $500 until you raise it
-- Max 10 payouts per hour
+- Per payout: max $500
+- Auto-approve only at or below $100; above that it's queued for manual approval
+- Per day: max $2,500 total across all payouts
+- Lifetime: max $25,000 until you raise it (raising requires a signed-in admin and is logged)
+- Max 20 payouts per hour
+- Automatic freeze if more than 3 payouts fail in an hour, or if the day's cap is hit twice in a row
+
+## Cloudflare security blueprint (in front of your custom domain)
+
+Cloudflare protects the public website address. The payout function also keeps its own checks, so it stays safe even if someone skips Cloudflare.
+
+```text
+Visitor -> Cloudflare (WAF, bot filter, rate limit) -> Your app -> Payout function (session + admin + caps) -> Stripe
+```
+
+- Connect your Cloudflare account; your custom domain's DNS must already be on Cloudflare.
+- Managed WAF rules on, plus custom rules: block non-HTTPS traffic, and challenge suspicious countries or bots on sign-in and admin pages.
+- Rate limits: sign-in 10/min per IP, payout actions 30/min per IP.
+- Bot Fight Mode on; strict TLS (Full strict, TLS 1.2+, HSTS).
+- A read-only Security panel in Farm Config shows blocked requests and threat events from Cloudflare.
+- Every change to Cloudflare rules is shown to you for confirmation before it is applied.
+- Note: some features (advanced rate limiting, Bot Management) need a paid Cloudflare plan.
 - Kill switch: payouts are OFF until you flip "Real payouts enabled" in Farm Config (stored on the server)
 - Every request carries a unique key so a retry can never pay twice
 - Destination must be a connected account you added yourself (allowlist); the farm cannot invent destinations
