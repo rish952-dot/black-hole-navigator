@@ -14,7 +14,118 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      farm_generations: {
+        Row: {
+          created_at: string
+          index: number
+          metrics: Json | null
+          record: Json
+          run_key: string
+        }
+        Insert: {
+          created_at?: string
+          index: number
+          metrics?: Json | null
+          record: Json
+          run_key: string
+        }
+        Update: {
+          created_at?: string
+          index?: number
+          metrics?: Json | null
+          record?: Json
+          run_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "farm_generations_run_key_fkey"
+            columns: ["run_key"]
+            isOneToOne: false
+            referencedRelation: "farm_runs"
+            referencedColumns: ["run_key"]
+          },
+        ]
+      }
+      farm_ledger: {
+        Row: {
+          agent_id: string
+          amount: number
+          description: string
+          generation: number
+          id: number
+          run_key: string
+          ts: string
+          type: string
+        }
+        Insert: {
+          agent_id: string
+          amount: number
+          description?: string
+          generation: number
+          id?: number
+          run_key: string
+          ts?: string
+          type: string
+        }
+        Update: {
+          agent_id?: string
+          amount?: number
+          description?: string
+          generation?: number
+          id?: number
+          run_key?: string
+          ts?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "farm_ledger_run_key_fkey"
+            columns: ["run_key"]
+            isOneToOne: false
+            referencedRelation: "farm_runs"
+            referencedColumns: ["run_key"]
+          },
+        ]
+      }
+      farm_runs: {
+        Row: {
+          config: Json
+          created_at: string
+          generation: number
+          halted: string | null
+          health: Json | null
+          mode: string
+          run_key: string
+          seed: number
+          totals: Json
+          updated_at: string
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          generation?: number
+          halted?: string | null
+          health?: Json | null
+          mode: string
+          run_key: string
+          seed: number
+          totals?: Json
+          updated_at?: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          generation?: number
+          halted?: string | null
+          health?: Json | null
+          mode?: string
+          run_key?: string
+          seed?: number
+          totals?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
